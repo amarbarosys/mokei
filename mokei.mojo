@@ -11,13 +11,16 @@ struct Lang(Copyable, Movable):
     var name: String
     var exts: List[String]
     var filenames: List[String]
+    var shebangs: List[String]  # interpreter names for extensionless scripts
     var lc: List[String]  # line comment tokens
     var bs: List[String]  # block comment starts
     var be: List[String]  # block comment ends, same index as bs
     var nested: Bool  # block comments nest
     var rs: List[String]  # raw string starts (no escapes inside), re[k] ends rs[k]
     var re: List[String]
+    var rawdelim: Bool  # C++ R"delim( ... )delim" raw strings
     var quotes: String  # string delimiter bytes
+    var multiline: String  # quote bytes whose strings may span lines
     var doc: Bool  # triple quotes at line start count as comment
     var prose: Bool  # every non-blank line counts as comment
 
@@ -49,7 +52,7 @@ def langs(path: String) raises -> List[Lang]:
     for raw in open(path, "r").read().split("\n"):
         var ln = String(raw.strip())
         if ln.startswith("[[lang]]"):
-            l.append(Lang("", [], [], [], [], [], False, [], [], "", False, False))
+            l.append(Lang("", [], [], [], [], [], [], False, [], [], False, "", "", False, False))
         elif len(l) > 0 and ln.find("=") > 0 and not ln.startswith("#"):
             var kv = ln.split("=", 1)
             var k = String(kv[0].strip())
@@ -62,6 +65,8 @@ def langs(path: String) raises -> List[Lang]:
                 r.exts = xs^
             elif k == "filenames":
                 r.filenames = xs^
+            elif k == "shebang":
+                r.shebangs = xs^
             elif k == "line":
                 r.lc = xs^
             elif k == "block":
@@ -74,8 +79,12 @@ def langs(path: String) raises -> List[Lang]:
                 for j in range(0, len(xs) - 1, 2):
                     r.rs.append(xs[j])
                     r.re.append(xs[j + 1])
+            elif k == "rawdelim":
+                r.rawdelim = v.startswith("true")
             elif k == "quotes":
                 r.quotes = xs[0]
+            elif k == "multiline":
+                r.multiline = xs[0]
             elif k == "doc":
                 r.doc = v.startswith("true")
             elif k == "prose":
@@ -104,16 +113,47 @@ def which(s: String, i: Int, toks: List[String]) -> Int:
     return -1
 
 
-def lang_of(path: String, by_name: Dict[String, Int], by_ext: Dict[String, Int]) raises -> Int:
-    var parts = path.split("/")
-    var base = String(parts[len(parts) - 1])
+def last(s: String, sep: String) -> String:
+    """Text after the last sep in s."""
+    var xs = s.split(sep)
+    return String(xs[len(xs) - 1])
+
+
+def shebang(path: String) -> String:
+    """Interpreter name of a `#!` first line (env skipped, version digits cut), else ""."""
+    var head: String
+    try:
+        head = open(path, "r").read(128)
+    except:
+        return ""
+    if not head.startswith("#!"):
+        return ""
+    var ws = String(head.split("\n")[0][byte=2:]).split()
+    var w = last(String(ws[0]), "/") if len(ws) > 0 else String("")
+    if w == "env":
+        w = ""
+        for k in range(1, len(ws)):
+            if not ws[k].startswith("-"):
+                w = last(String(ws[k]), "/")
+                break
+    var wb = w.as_bytes()
+    var e = len(wb)
+    while e > 0 and wb[e - 1] <= 57 and (wb[e - 1] >= 48 or wb[e - 1] == 46):
+        e -= 1
+    return String(w[byte=:e])
+
+
+def lang_of(path: String, by_name: Dict[String, Int], by_ext: Dict[String, Int], by_sh: Dict[String, Int]) raises -> Int:
+    """Language index: exact filename, extension, else the shebang of an extensionless file."""
+    var base = last(path, "/")
     if base in by_name:
         return by_name[base]
     var xs = base.split(".")
     var e = String(xs[len(xs) - 1])
-    if len(xs) > 1 and e in by_ext:
-        return by_ext[e]
-    return -1
+    if len(xs) > 1:
+        return by_ext[e] if e in by_ext else -1
+    var w = shebang(path)
+    return by_sh[w] if w in by_sh else -1
 
 
 def count(s: String, lg: Lang, mut res: List[Int]):
@@ -128,6 +168,7 @@ def count(s: String, lg: Lang, mut res: List[Int]):
     var block_end = String("")
     var q = String("")  # open string delimiter, "" = none
     var raw = False  # open string is raw: no escapes, spans lines
+    var tdepth = List[Int]()  # brace depth of each open `${` inside a template string
     var code = False
     var com = False
     var i = 0
@@ -146,8 +187,8 @@ def count(s: String, lg: Lang, mut res: List[Int]):
                 res[2] += 1
             else:
                 res[3] += 1
-            if q.byte_length() == 1 and q != "`" and not raw:
-                q = ""  # quote strings end at line end; template strings span lines
+            if q.byte_length() == 1 and not raw and lg.multiline.find(q) < 0:
+                q = ""  # quote strings end at line end unless the language lets them span lines
             code = q.byte_length() > 0
             com = in_block
             i += 1
@@ -167,6 +208,10 @@ def count(s: String, lg: Lang, mut res: List[Int]):
         elif q.byte_length() > 0:
             code = True
             if c == BS and not raw:
+                i += 1 if i + 1 < n and b[i + 1] == NL else 2  # keep the newline: it ends a line
+            elif q == "`" and not raw and at(s, i, "${"):
+                tdepth.append(1)
+                q = ""
                 i += 2
             elif at(s, i, q):
                 i += q.byte_length()
@@ -175,6 +220,16 @@ def count(s: String, lg: Lang, mut res: List[Int]):
             else:
                 i += 1
         elif c == UInt8(ord(" ")) or c == UInt8(ord("\t")) or c == UInt8(ord("\r")):
+            i += 1
+        elif c == BS:  # an escaped byte outside a string: never a quote or comment start
+            code = True
+            i += 1 if i + 1 < n and b[i + 1] == NL else 2
+        elif len(tdepth) > 0 and (c == UInt8(ord("{")) or c == UInt8(ord("}"))):
+            code = True
+            tdepth[len(tdepth) - 1] += 1 if c == UInt8(ord("{")) else -1
+            if tdepth[len(tdepth) - 1] == 0:
+                _ = tdepth.pop()
+                q = "`"
             i += 1
         else:
             var bi = which(s, i, lg.bs)
@@ -198,6 +253,18 @@ def count(s: String, lg: Lang, mut res: List[Int]):
                 block_start = '"""' if at(s, i, '"""') else "'''"
                 block_end = block_start
                 i += 3
+            elif lg.rawdelim and at(s, i, 'R"') and (i == 0 or not is_word(b[i - 1])):
+                code = True
+                var j = i + 2
+                while j < n and j < i + 20 and b[j] != UInt8(ord("(")) and b[j] != UInt8(ord('"')):
+                    j += 1
+                if j < n and b[j] == UInt8(ord("(")):
+                    raw = True
+                    q = ")" + String(s[byte=i + 2 : j]) + '"'
+                    i = j + 1
+                else:
+                    q = '"'
+                    i += 2
             elif ri >= 0:
                 code = True
                 raw = True
@@ -251,16 +318,19 @@ def main() raises:
     var L = langs(lang_path())
     var by_name = Dict[String, Int]()
     var by_ext = Dict[String, Int]()
+    var by_sh = Dict[String, Int]()
     for k in range(len(L)):
         for x in L[k].filenames:
             by_name[x] = k
+        for x in L[k].shebangs:
+            by_sh[x] = k
         for x in L[k].exts:
             by_ext[x] = k
     var stats = List[List[Int]]()  # files, lines, code, comment, blank
     for _ in range(len(L)):
         stats.append([0, 0, 0, 0, 0])
     for f in files:
-        var k = lang_of(f, by_name, by_ext)
+        var k = lang_of(f, by_name, by_ext, by_sh)
         if k < 0:
             continue
         var s: String

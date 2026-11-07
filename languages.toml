@@ -1,13 +1,14 @@
 # mokei language table. One [[lang]] per language; add a row, no code change.
-# exts/filenames: matched on the extension / exact basename.  line: line-comment tokens.
+# exts/filenames: matched on the extension / exact basename.  shebang: interpreter names for extensionless scripts.  line: line-comment tokens.
 # block: flat list of (start, end) pairs.  nested: block comments nest.
-# quotes: string delimiter bytes.  doc: triple quotes at line start are comments.
+# quotes: string delimiter bytes.  multiline: the quote bytes whose strings may span lines.  doc: triple quotes at line start are comments.
 # nested: block comments nest.  raw: flat (start, end) raw-string pairs, no escapes, may span lines.
-# prose: every non-blank line counts as comment (Markdown, like tokei).
+# rawdelim: C++ R"delim( )delim" strings.  prose: every non-blank line counts as comment (Markdown, like tokei).
 
 [[lang]]
 name = "Python"
 exts = ["py", "pyi"]
+shebang = ["python"]
 line = ["#"]
 raw = ["r\"\"\"", "\"\"\"", "r'''", "'''", "r\"", "\"", "r'", "'"]
 quotes = "\"'"
@@ -15,15 +16,18 @@ quotes = "\"'"
 [[lang]]
 name = "Mojo"
 exts = ["mojo", "🔥"]
+shebang = ["mojo"]
 line = ["#"]
-quotes = "\"'"
+quotes = "\"'`"
 
 [[lang]]
 name = "JavaScript"
 exts = ["js", "mjs", "cjs", "jsx"]
+shebang = ["node"]
 line = ["//"]
 block = ["/*", "*/"]
 quotes = "\"'`"
+multiline = "`"
 
 [[lang]]
 name = "TypeScript"
@@ -31,6 +35,7 @@ exts = ["ts", "tsx"]
 line = ["//"]
 block = ["/*", "*/"]
 quotes = "\"'`"
+multiline = "`"
 
 [[lang]]
 name = "Rust"
@@ -40,6 +45,7 @@ block = ["/*", "*/"]
 nested = true
 raw = ["r##\"", "\"##", "r#\"", "\"#", "r\"", "\""]
 quotes = "\""
+multiline = "\""
 
 [[lang]]
 name = "C"
@@ -53,7 +59,7 @@ name = "C++"
 exts = ["cpp", "cc", "cxx", "hpp", "hh"]
 line = ["//"]
 block = ["/*", "*/"]
-raw = ["R\"(", ")\""]
+rawdelim = true
 quotes = "\"'"
 
 [[lang]]
@@ -61,7 +67,8 @@ name = "Go"
 exts = ["go"]
 line = ["//"]
 block = ["/*", "*/"]
-quotes = "\"'`"
+raw = ["`", "`"]
+quotes = "\"'"
 
 [[lang]]
 name = "CSS"
@@ -83,8 +90,10 @@ prose = true
 [[lang]]
 name = "Shell"
 exts = ["sh", "bash", "fish", "zsh"]
+shebang = ["sh", "bash", "zsh", "fish", "dash", "ksh"]
 line = ["#"]
 quotes = "\"'"
+multiline = "\"'"
 
 [[lang]]
 name = "Dockerfile"
@@ -92,10 +101,11 @@ exts = ["Dockerfile", "dockerfile"]
 filenames = ["Dockerfile"]
 line = ["#"]
 quotes = "\"'"
+multiline = "\"'"
 
 [[lang]]
 name = "INI"
-exts = ["ini", "cfg"]
+exts = ["ini"]
 line = ["#", ";"]
 
 [[lang]]
@@ -109,10 +119,12 @@ name = "YAML"
 exts = ["yml", "yaml"]
 line = ["#"]
 quotes = "\"'"
+multiline = "\"'"
 
 [[lang]]
 name = "Lua"
 exts = ["lua"]
+shebang = ["lua"]
 line = ["--"]
 block = ["--[[", "]]"]
 quotes = "\"'"
@@ -124,3 +136,165 @@ line = ["//"]
 block = ["/*", "*/"]
 nested = true
 quotes = "\""
+
+[[lang]]
+name = "Java"
+exts = ["java"]
+line = ["//"]
+block = ["/*", "*/"]
+quotes = "\"'"
+
+[[lang]]
+name = "C#"
+exts = ["cs"]
+line = ["//"]
+block = ["/*", "*/"]
+raw = ["@\"", "\""]
+quotes = "\"'"
+
+[[lang]]
+name = "Kotlin"
+exts = ["kt", "kts"]
+line = ["//"]
+block = ["/*", "*/"]
+nested = true
+quotes = "\"'"
+
+[[lang]]
+name = "Scala"
+exts = ["scala", "sc"]
+line = ["//"]
+block = ["/*", "*/"]
+nested = true
+quotes = "\""
+
+[[lang]]
+name = "Dart"
+exts = ["dart"]
+line = ["//"]
+block = ["/*", "*/"]
+nested = true
+quotes = "\"'"
+
+[[lang]]
+name = "Zig"
+exts = ["zig"]
+line = ["//"]
+quotes = "\""
+
+[[lang]]
+name = "Protocol Buffers"
+exts = ["proto"]
+line = ["//"]
+block = ["/*", "*/"]
+quotes = "\"'"
+
+[[lang]]
+name = "SCSS"
+exts = ["scss"]
+line = ["//"]
+block = ["/*", "*/"]
+quotes = "\"'"
+
+[[lang]]
+name = "PHP"
+exts = ["php"]
+shebang = ["php"]
+line = ["//", "#"]
+block = ["/*", "*/"]
+quotes = "\"'"
+multiline = "\"'"
+
+[[lang]]
+name = "Ruby"
+exts = ["rb"]
+shebang = ["ruby"]
+line = ["#"]
+block = ["=begin", "=end"]
+quotes = "\"'"
+multiline = "\"'"
+
+[[lang]]
+name = "Perl"
+exts = ["pl", "pm"]
+shebang = ["perl"]
+line = ["#"]
+block = ["=pod", "=cut"]
+quotes = "\"'"
+multiline = "\"'"
+
+[[lang]]
+name = "R"
+exts = ["r", "R"]
+line = ["#"]
+quotes = "\"'"
+
+[[lang]]
+name = "Julia"
+exts = ["jl"]
+line = ["#"]
+block = ["#=", "=#"]
+nested = true
+quotes = "\""
+multiline = "\""
+
+[[lang]]
+name = "Elixir"
+exts = ["ex", "exs"]
+line = ["#"]
+quotes = "\"'"
+multiline = "\"'"
+
+[[lang]]
+name = "Haskell"
+exts = ["hs"]
+line = ["--"]
+block = ["{-", "-}"]
+nested = true
+quotes = "\""
+
+[[lang]]
+name = "SQL"
+exts = ["sql"]
+line = ["--"]
+block = ["/*", "*/"]
+quotes = "\"'"
+multiline = "'"
+
+[[lang]]
+name = "JSON"
+exts = ["json"]
+
+[[lang]]
+name = "XML"
+exts = ["xml"]
+block = ["<!--", "-->"]
+
+[[lang]]
+name = "Makefile"
+exts = ["mk"]
+filenames = ["Makefile", "makefile", "GNUmakefile"]
+line = ["#"]
+quotes = "\"'"
+
+[[lang]]
+name = "CMake"
+exts = ["cmake"]
+filenames = ["CMakeLists.txt"]
+line = ["#"]
+block = ["#[[", "]]"]
+quotes = "\""
+multiline = "\""
+
+[[lang]]
+name = "PowerShell"
+exts = ["ps1", "psm1"]
+line = ["#"]
+block = ["<#", "#>"]
+quotes = "\"'"
+multiline = "\"'"
+
+[[lang]]
+name = "TeX"
+exts = ["tex", "sty", "cls"]
+line = ["%"]

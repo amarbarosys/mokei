@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# One runner: each row is a fixture, hand-counted and checked against tokei 15.0.0 (2026-11-07).
+# One runner: each row is a fixture, numbers from a tokei 15.0.0 run (2026-11-07), hand counts only as a cross-check.
 # row: file | Language | files lines code comments blanks
 set -euo pipefail
 d="$(dirname "$(readlink -f "$0")")"; b="${MOKEI_BIN:-$d/../.bin/mokei}"
@@ -18,6 +18,11 @@ n.rs Rust 1 7 4 3 0
 p.py Python 1 6 5 1 0
 r.cpp C++ 1 5 4 1 0
 s.swift Swift 1 4 1 3 0
+tpl.js JavaScript 1 5 4 0 1
+raw2.cpp C++ 1 3 3 0 0
+g.go Go 1 3 2 1 0
+sb Shell 1 5 3 2 0
+cont.py Python 1 3 2 1 0
 ROWS
 # a new language row needs no code
 got="$(MOKEI_LANGS="$d/fx/extra.toml" "$b" d.foo | awk '$1=="Foo"{print $2,$3,$4,$5,$6}')"
