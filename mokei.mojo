@@ -1,11 +1,11 @@
 # mokei: count code, comment and blank lines per language (tokei-like).
-# Usage: mokei [FILE ...]   (no args: files from `git ls-files` in cwd)
+# Usage: mokei [FILE|DIR ...]   (DIR: walk honouring .gitignore; no args: `git ls-files` in cwd, else walk .)
 from std.sys import argv, exit, stderr
 from std.subprocess import run
-from std.os import getenv
+from std.os import getenv, listdir
 from std.runtime import parallelism_level
 from max.algorithm import parallelize
-from std.os.path import dirname, realpath
+from std.os.path import dirname, isdir, isfile, islink, realpath
 
 
 @fieldwise_init
@@ -348,6 +348,139 @@ def lang_of(path: String, by_name: Dict[String, Int], by_ext: Dict[String, Int],
     return by_sh[w] if w in by_sh else -1
 
 
+@fieldwise_init
+struct Rule(Copyable, Movable):
+    var base: String  # directory of the .gitignore, "" or ends with "/"
+    var pat: String
+    var neg: Bool
+    var dironly: Bool
+    var anchored: Bool  # pattern holds a slash: match the path below base, else the basename
+
+
+def glob(p: Span[UInt8, _], pi0: Int, s: Span[UInt8, _], si0: Int) -> Bool:
+    """Gitignore glob: * and ? stop at /, [set], a/**/b, trailing /**."""
+    var pi = pi0
+    var si = si0
+    var SL = UInt8(ord("/"))
+    var ST = UInt8(ord("*"))
+    while pi < len(p):
+        var c = p[pi]
+        if c == ST:
+            var j = pi + 1
+            while j < len(p) and p[j] == ST:
+                j += 1
+            if j - pi >= 2 and (pi == 0 or p[pi - 1] == SL) and (j == len(p) or p[j] == SL):
+                if j == len(p):
+                    return si < len(s)  # trailing /**: everything inside
+                var k = si
+                while True:  # **/: zero or more directories
+                    if glob(p, j + 1, s, k):
+                        return True
+                    while k < len(s) and s[k] != SL:
+                        k += 1
+                    if k >= len(s):
+                        return False
+                    k += 1
+            var k = si
+            while True:  # a star run: any bytes but /
+                if glob(p, j, s, k):
+                    return True
+                if k >= len(s) or s[k] == SL:
+                    return False
+                k += 1
+        elif c == UInt8(ord("?")):
+            if si >= len(s) or s[si] == SL:
+                return False
+            pi += 1
+            si += 1
+        elif c == UInt8(ord("[")):
+            var j = pi + 1
+            var neg = j < len(p) and (p[j] == UInt8(ord("!")) or p[j] == UInt8(ord("^")))
+            if neg:
+                j += 1
+            var hit = False
+            var first = True
+            while j < len(p) and (p[j] != UInt8(ord("]")) or first):
+                first = False
+                if j + 2 < len(p) and p[j + 1] == UInt8(ord("-")) and p[j + 2] != UInt8(ord("]")):
+                    hit = hit or (si < len(s) and s[si] >= p[j] and s[si] <= p[j + 2])
+                    j += 3
+                else:
+                    hit = hit or (si < len(s) and s[si] == p[j])
+                    j += 1
+            if j >= len(p) or si >= len(s) or s[si] == SL or hit == neg:
+                return False
+            pi = j + 1
+            si += 1
+        else:
+            if c == UInt8(ord("\\")) and pi + 1 < len(p):
+                pi += 1
+            if si >= len(s) or s[si] != p[pi]:
+                return False
+            pi += 1
+            si += 1
+    return si == len(s)
+
+
+def cut(s: String, a: Int, b: Int) -> String:
+    """Bytes a..b of s."""
+    return String(unsafe_from_utf8=s.as_bytes()[a:b])
+
+
+def add_rules(base: String, text: String, mut rules: List[Rule]):
+    """Rules of one .gitignore (blank and # lines skipped, ! negates, trailing / = dirs only)."""
+    for raw in text.split("\n"):
+        var ln = String(raw.rstrip())
+        if ln.byte_length() == 0 or ln.startswith("#"):
+            continue
+        var neg = ln.startswith("!")
+        if neg or ln.startswith("\\#") or ln.startswith("\\!"):
+            ln = cut(ln, 1, ln.byte_length())  # drops the ! or the escape
+        var dironly = ln.endswith("/")
+        if dironly:
+            ln = cut(ln, 0, ln.byte_length() - 1)
+        var anchored = ln.find("/") >= 0
+        if ln.startswith("/"):
+            ln = cut(ln, 1, ln.byte_length())
+        if ln.byte_length() > 0:
+            rules.append(Rule(base, ln, neg, dironly, anchored))
+
+
+def is_ignored(rel: String, name: String, isd: Bool, rules: List[Rule]) -> Bool:
+    var res = False
+    for k in range(len(rules)):
+        ref r = rules[k]
+        if (r.dironly and not isd) or r.neg != res:
+            continue  # only a rule that flips the current answer can matter
+        var subject = cut(rel, r.base.byte_length(), rel.byte_length()) if r.anchored else name
+        if glob(r.pat.as_bytes(), 0, subject.as_bytes(), 0):
+            res = not r.neg
+    return res
+
+
+def walk(root: String, rel: String, mut rules: List[Rule], mut out: List[String]) raises:
+    """Files below root/rel in sorted order, honouring .gitignore files; .git and dir symlinks skipped."""
+    var dir = root if rel == "" else root + "/" + rel
+    var mark = len(rules)
+    var gi = dir + "/.gitignore"
+    if isfile(gi):
+        add_rules(rel + "/" if rel != "" else "", open(gi, "r").read(), rules)
+    var names = listdir(dir)
+    sort(names)
+    for name in names:
+        var r = rel + "/" + name if rel != "" else name
+        var p = root + "/" + r
+        var isd = isdir(p)
+        if name == ".git" or (isd and islink(p)) or is_ignored(r, name, isd, rules):
+            continue
+        if isd:
+            walk(root, r, rules, out)
+        else:
+            out.append(p)
+    while len(rules) > mark:
+        _ = rules.pop()
+
+
 def lang_path() raises -> String:
     """$MOKEI_LANGS, else languages.toml one directory above the binary."""
     var e = getenv("MOKEI_LANGS")
@@ -366,13 +499,25 @@ def pad(s: String, w: Int, left: Bool) -> String:
 def main() raises:
     var args = argv()
     var files = List[String]()
+    var rules = List[Rule]()
     if len(args) > 1:
         for k in range(1, len(args)):
-            files.append(String(args[k]))
+            var a = String(args[k])
+            if isdir(a):
+                walk(String(a.rstrip("/")) if a != "/" else a, "", rules, files)
+            else:
+                files.append(a)
     else:
-        for ln in run("git ls-files").split("\n"):
-            if ln.byte_length() > 0:
-                files.append(String(ln))
+        var listed = False
+        try:
+            for ln in run("git ls-files 2>/dev/null").split("\n"):
+                if ln.byte_length() > 0:
+                    files.append(String(ln))
+                    listed = True
+        except:
+            pass
+        if not listed:
+            walk(".", "", rules, files)
     var L = langs(lang_path())
     var by_name = Dict[String, Int]()
     var by_ext = Dict[String, Int]()

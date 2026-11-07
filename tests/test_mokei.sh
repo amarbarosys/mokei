@@ -28,6 +28,18 @@ ROWS
 got="$(MOKEI_LANGS="$d/fx/extra.toml" "$b" d.foo | awk '$1=="Foo"{print $2,$3,$4,$5,$6}')"
 [ "$got" = "1 5 1 3 1" ] || fail extra-row "got '$got'"
 echo "ok mokei fixtures"
+# gitignore walk: a fixture tree built fresh under .work/scratch; 6 of the 15 .py files survive the ignore rules
+t="$d/../.work/scratch/tree"
+[ -n "$d" ] && [ -d "$t" ] && rm -rf -- "$t"
+mkdir -p "$t/.git" "$t/build" "$t/deep/build" "$t/deep/sub" "$t/sub/inner" "$t/docs/x/y"
+printf 'ign_*.py\nbuild/\n/top.py\n!ign_keep.py\nsub/*.py\ndocs/**/gen.py\n' > "$t/.gitignore"
+printf 'local_*.py\n' > "$t/deep/.gitignore"
+for f in a.py top.py deep/top.py ign_1.py ign_keep.py build/b.py deep/build/c.py sub/s.py sub/inner/s2.py docs/gen.py docs/x/y/gen.py docs/keep.py deep/local_1.py deep/sub/local_2.py local_3.py .git/hook.py; do echo 'x = 1' > "$t/$f"; done
+got="$("$b" "$t" | awk '$1=="Python"{print $2,$3,$4}')"
+[ "$got" = "6 6 6" ] || fail walk "want '6 6 6' got '$got'"
+got="$(cd "$t" && GIT_CEILING_DIRECTORIES="$(dirname "$t")" "$b" | awk '$1=="Python"{print $2,$3,$4}')"
+[ "$got" = "6 6 6" ] || fail walk-default "no git repo: want '6 6 6' got '$got'"
+echo "ok mokei walk"
 # parallel scan = serial scan, byte for byte (this repo plus the fixtures)
 cd "$d/.."
 cmp <(MOKEI_JOBS=1 "$b" tests/fx/* mokei.mojo) <("$b" tests/fx/* mokei.mojo) || fail parallel "output differs from MOKEI_JOBS=1"
