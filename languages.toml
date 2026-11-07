@@ -2,12 +2,14 @@
 # exts/filenames: matched on the extension / exact basename.  line: line-comment tokens.
 # block: flat list of (start, end) pairs.  nested: block comments nest.
 # quotes: string delimiter bytes.  doc: triple quotes at line start are comments.
+# nested: block comments nest.  raw: flat (start, end) raw-string pairs, no escapes, may span lines.
 # prose: every non-blank line counts as comment (Markdown, like tokei).
 
 [[lang]]
 name = "Python"
 exts = ["py", "pyi"]
 line = ["#"]
+raw = ["r\"\"\"", "\"\"\"", "r'''", "'''", "r\"", "\"", "r'", "'"]
 quotes = "\"'"
 
 [[lang]]
@@ -35,6 +37,8 @@ name = "Rust"
 exts = ["rs"]
 line = ["//"]
 block = ["/*", "*/"]
+nested = true
+raw = ["r##\"", "\"##", "r#\"", "\"#", "r\"", "\""]
 quotes = "\""
 
 [[lang]]
@@ -49,6 +53,7 @@ name = "C++"
 exts = ["cpp", "cc", "cxx", "hpp", "hh"]
 line = ["//"]
 block = ["/*", "*/"]
+raw = ["R\"(", ")\""]
 quotes = "\"'"
 
 [[lang]]
@@ -91,7 +96,7 @@ quotes = "\"'"
 [[lang]]
 name = "INI"
 exts = ["ini", "cfg"]
-line = ["#"]
+line = ["#", ";"]
 
 [[lang]]
 name = "TOML"
@@ -104,3 +109,18 @@ name = "YAML"
 exts = ["yml", "yaml"]
 line = ["#"]
 quotes = "\"'"
+
+[[lang]]
+name = "Lua"
+exts = ["lua"]
+line = ["--"]
+block = ["--[[", "]]"]
+quotes = "\"'"
+
+[[lang]]
+name = "Swift"
+exts = ["swift"]
+line = ["//"]
+block = ["/*", "*/"]
+nested = true
+quotes = "\""

@@ -1,16 +1,25 @@
 #!/usr/bin/env bash
-# Hand-counted fixtures; numbers checked against tokei 2026-11-07 (Python, CSS-family match exactly).
+# One runner: each row is a fixture, hand-counted and checked against tokei 15.0.0 (2026-11-07).
+# row: file | Language | files lines code comments blanks
 set -euo pipefail
 d="$(dirname "$(readlink -f "$0")")"; b="${MOKEI_BIN:-$d/../.bin/mokei}"
 cd "$d/fx"
-out="$("$b" a.py b.js c.html)"
-exp='Python 1 6 4 1 1
-JavaScript 1 8 4 4 0
-HTML 1 3 1 1 1'
-got="$(echo "$out" | awk 'NR>1 && $1!="Total"{print $1,$2,$3,$4,$5,$6}' | sort)"
-if [ "$got" != "$(echo "$exp" | sort)" ]; then echo "FAIL fixtures: got"; echo "$got"; exit 1; fi
+fail() { echo "FAIL $1: $2"; exit 1; }
+while read -r f lang row; do
+  got="$("$b" "$f" | awk -v l="$lang" '$1==l{print $2,$3,$4,$5,$6}')"
+  [ "$got" = "$row" ] || fail "$f" "want '$row' got '$got'"
+done <<'ROWS'
+a.py Python 1 6 4 1 1
+b.js JavaScript 1 8 4 4 0
+c.html HTML 1 3 1 1 1
+t.ini INI 1 5 2 2 1
+l.lua Lua 1 6 2 3 1
+n.rs Rust 1 7 4 3 0
+p.py Python 1 6 5 1 0
+r.cpp C++ 1 5 4 1 0
+s.swift Swift 1 4 1 3 0
+ROWS
+# a new language row needs no code
+got="$(MOKEI_LANGS="$d/fx/extra.toml" "$b" d.foo | awk '$1=="Foo"{print $2,$3,$4,$5,$6}')"
+[ "$got" = "1 5 1 3 1" ] || fail extra-row "got '$got'"
 echo "ok mokei fixtures"
-# a new language row needs no code: Foo = 5 lines, 1 code, 3 comment, 1 blank
-got="$(MOKEI_LANGS="$d/fx/extra.toml" "$b" d.foo | awk '$1=="Foo"{print $1,$2,$3,$4,$5,$6}')"
-if [ "$got" != "Foo 1 5 1 3 1" ]; then echo "FAIL extra-row: got '$got'"; exit 1; fi
-echo "ok mokei extra row"

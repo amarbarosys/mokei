@@ -14,6 +14,9 @@ struct Lang(Copyable, Movable):
     var lc: List[String]  # line comment tokens
     var bs: List[String]  # block comment starts
     var be: List[String]  # block comment ends, same index as bs
+    var nested: Bool  # block comments nest
+    var rs: List[String]  # raw string starts (no escapes inside), re[k] ends rs[k]
+    var re: List[String]
     var quotes: String  # string delimiter bytes
     var doc: Bool  # triple quotes at line start count as comment
     var prose: Bool  # every non-blank line counts as comment
@@ -46,7 +49,7 @@ def langs(path: String) raises -> List[Lang]:
     for raw in open(path, "r").read().split("\n"):
         var ln = String(raw.strip())
         if ln.startswith("[[lang]]"):
-            l.append(Lang("", [], [], [], [], [], "", False, False))
+            l.append(Lang("", [], [], [], [], [], False, [], [], "", False, False))
         elif len(l) > 0 and ln.find("=") > 0 and not ln.startswith("#"):
             var kv = ln.split("=", 1)
             var k = String(kv[0].strip())
@@ -65,6 +68,12 @@ def langs(path: String) raises -> List[Lang]:
                 for j in range(0, len(xs) - 1, 2):
                     r.bs.append(xs[j])
                     r.be.append(xs[j + 1])
+            elif k == "nested":
+                r.nested = v.startswith("true")
+            elif k == "raw":
+                for j in range(0, len(xs) - 1, 2):
+                    r.rs.append(xs[j])
+                    r.re.append(xs[j + 1])
             elif k == "quotes":
                 r.quotes = xs[0]
             elif k == "doc":
@@ -114,8 +123,11 @@ def count(s: String, lg: Lang, mut res: List[Int]):
     var NL = UInt8(ord("\n"))
     var BS = UInt8(ord("\\"))
     var in_block = False
+    var depth = 0  # block comment nesting
+    var block_start = String("")
     var block_end = String("")
     var q = String("")  # open string delimiter, "" = none
+    var raw = False  # open string is raw: no escapes, spans lines
     var code = False
     var com = False
     var i = 0
@@ -134,7 +146,7 @@ def count(s: String, lg: Lang, mut res: List[Int]):
                 res[2] += 1
             else:
                 res[3] += 1
-            if q.byte_length() == 1 and q != "`":
+            if q.byte_length() == 1 and q != "`" and not raw:
                 q = ""  # quote strings end at line end; template strings span lines
             code = q.byte_length() > 0
             com = in_block
@@ -143,39 +155,54 @@ def count(s: String, lg: Lang, mut res: List[Int]):
         var c = b[i]
         if in_block:
             com = True
-            if at(s, i, block_end):
-                in_block = False
+            if lg.nested and at(s, i, block_start):
+                depth += 1
+                i += block_start.byte_length()
+            elif at(s, i, block_end):
+                depth -= 1
+                in_block = depth > 0
                 i += block_end.byte_length()
             else:
                 i += 1
         elif q.byte_length() > 0:
             code = True
-            if c == BS:
+            if c == BS and not raw:
                 i += 2
             elif at(s, i, q):
                 i += q.byte_length()
                 q = ""
+                raw = False
             else:
                 i += 1
         elif c == UInt8(ord(" ")) or c == UInt8(ord("\t")) or c == UInt8(ord("\r")):
             i += 1
         else:
-            var li = which(s, i, lg.lc)
             var bi = which(s, i, lg.bs)
-            if li >= 0:
+            var li = which(s, i, lg.lc) if bi < 0 else -1
+            var ri = which(s, i, lg.rs) if i == 0 or not is_word(b[i - 1]) else -1
+            if bi >= 0:
+                com = True
+                in_block = True
+                depth = 1
+                block_start = lg.bs[bi]
+                block_end = lg.be[bi]
+                i += block_start.byte_length()
+            elif li >= 0:
                 com = True
                 while i < n and b[i] != NL:
                     i += 1
-            elif bi >= 0:
+            elif lg.doc and not code and (at(s, i, '"""') or at(s, i, "'''")):
                 com = True
                 in_block = True
-                block_end = lg.be[bi]
-                i += lg.bs[bi].byte_length()
-            elif lg.doc and not code and (at(s, i, "\"\"\"") or at(s, i, "'''")):
-                com = True
-                in_block = True
-                block_end = "\"\"\"" if at(s, i, "\"\"\"") else "'''"
+                depth = 1
+                block_start = '"""' if at(s, i, '"""') else "'''"
+                block_end = block_start
                 i += 3
+            elif ri >= 0:
+                code = True
+                raw = True
+                q = lg.re[ri]
+                i += lg.rs[ri].byte_length()
             else:
                 code = True
                 var qs = lg.quotes.as_bytes()
@@ -190,6 +217,10 @@ def count(s: String, lg: Lang, mut res: List[Int]):
                         i += q.byte_length() - 1
                         break
                 i += 1
+
+
+def is_word(c: UInt8) -> Bool:
+    return (c >= 48 and c <= 57) or (c >= 65 and c <= 90) or (c >= 97 and c <= 122) or c == 95
 
 
 def lang_path() raises -> String:
