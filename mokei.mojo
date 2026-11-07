@@ -25,6 +25,7 @@ struct Lang(Copyable, Movable):
     var multiline: String  # quote bytes whose strings may span lines
     var doc: Bool  # triple quotes at line start count as comment
     var prose: Bool  # every non-blank line counts as comment
+    var cls: List[UInt8]  # byte classes built by prep()
 
 
 def strs(v: String) -> List[String]:
@@ -54,7 +55,7 @@ def langs(path: String) raises -> List[Lang]:
     for raw in open(path, "r").read().split("\n"):
         var ln = String(raw.strip())
         if ln.startswith("[[lang]]"):
-            l.append(Lang("", [], [], [], [], [], [], False, [], [], False, "", "", False, False))
+            l.append(Lang("", [], [], [], [], [], [], False, [], [], False, "", "", False, False, []))
         elif len(l) > 0 and ln.find("=") > 0 and not ln.startswith("#"):
             var kv = ln.split("=", 1)
             var k = String(kv[0].strip())
@@ -93,26 +94,215 @@ def langs(path: String) raises -> List[Lang]:
                 r.prose = v.startswith("true")
             else:
                 raise Error("FAIL languages: unknown key " + k)
+    for k in range(len(l)):
+        prep(l[k])
     return l^
 
 
-def at(s: String, i: Int, tok: String) -> Bool:
-    var b = s.as_bytes()
+def at(b: Span[UInt8, _], i: Int, tok: String) -> Bool:
     var t = tok.as_bytes()
-    if len(t) == 0 or i + len(t) > len(b):
+    var m = len(t)
+    if m == 0 or i + m > len(b):
         return False
-    for j in range(len(t)):
+    for j in range(m):
         if b[i + j] != t[j]:
             return False
     return True
 
 
-def which(s: String, i: Int, toks: List[String]) -> Int:
-    """Index of the first token of toks found at byte i of s, else -1."""
+def which(b: Span[UInt8, _], i: Int, toks: List[String]) -> Int:
+    """Index of the first token of toks found at byte i of b, else -1."""
     for k in range(len(toks)):
-        if at(s, i, toks[k]):
+        if at(b, i, toks[k]):
             return k
     return -1
+
+
+def skip_to(b: Span[UInt8, _], i: Int, x: UInt8, y: UInt8, z: UInt8, w: UInt8) -> Int:
+    """First index >= i holding one of x, y, z, w, else len(b). 32 bytes per step."""
+    var n = len(b)
+    var p = b.unsafe_ptr()
+    var j = i
+    while j + 32 <= n:
+        var v = p.unsafe_load[width=32](j)
+        if ((v.eq(x)) | (v.eq(y)) | (v.eq(z)) | (v.eq(w))).reduce_or():
+            break
+        j += 32
+    while j < n and b[j] != x and b[j] != y and b[j] != z and b[j] != w:
+        j += 1
+    return j
+
+
+def prep(mut lg: Lang):
+    """Byte classes for count(): 0 plain, 1 blank, 2 may start a token, 3 newline."""
+    lg.cls = List[UInt8](length=256, fill=0)
+    for c in [32, 9, 13]:
+        lg.cls[c] = 1
+    lg.cls[10] = 3
+    lg.cls[ord("\\")] = 2
+    for toks in [lg.lc.copy(), lg.bs.copy(), lg.rs.copy()]:
+        for t in toks:
+            lg.cls[Int(t.as_bytes()[0])] = 2
+    for c in lg.quotes.as_bytes():
+        lg.cls[Int(c)] = 2
+    if lg.doc:
+        lg.cls[ord('"')] = 2
+        lg.cls[ord("'")] = 2
+    if lg.rawdelim:
+        lg.cls[ord("R")] = 2
+    if lg.quotes.find("`") >= 0:
+        lg.cls[ord("{")] = 2
+        lg.cls[ord("}")] = 2
+
+
+def count(b: Span[UInt8, _], lg: Lang, mut res: List[Int]):
+    """Adds lines, code, comment, blank of the bytes b to res[0..3]."""
+    var n = len(b)
+    var cls = lg.cls.unsafe_ptr()
+    var bp = b.unsafe_ptr()
+    var NL = UInt8(ord("\n"))
+    var BS = UInt8(ord("\\"))
+    var DL = UInt8(ord("$"))
+    var in_block = False
+    var depth = 0  # block comment nesting
+    var block_start = String("")
+    var block_end = String("")
+    var q = String("")  # open string delimiter, "" = none
+    var raw = False  # open string is raw: no escapes, spans lines
+    var tdepth = List[Int]()  # brace depth of each open `${` inside a template string
+    var code = False
+    var com = False
+    var i = 0
+    while i <= n:
+        if i == n or b[i] == NL:
+            if i == n and i > 0 and b[i - 1] == NL:
+                break  # trailing newline: no extra line
+            if i == n and n == 0:
+                break
+            res[0] += 1
+            if code and lg.prose:
+                res[2] += 1  # prose counts as comment, like tokei
+            elif code:
+                res[1] += 1
+            elif com:
+                res[2] += 1
+            else:
+                res[3] += 1
+            if q.byte_length() == 1 and not raw and lg.multiline.find(q) < 0:
+                q = ""  # quote strings end at line end unless the language lets them span lines
+            code = q.byte_length() > 0
+            com = in_block
+            i += 1
+            continue
+        var c = b[i]
+        if in_block:
+            com = True
+            var e0 = block_end.as_bytes()[0]
+            var s0 = block_start.as_bytes()[0] if lg.nested else e0
+            i = skip_to(b, i, NL, e0, s0, e0)
+            if i < n and b[i] != NL:
+                if lg.nested and at(b, i, block_start):
+                    depth += 1
+                    i += block_start.byte_length()
+                elif at(b, i, block_end):
+                    depth -= 1
+                    in_block = depth > 0
+                    i += block_end.byte_length()
+                else:
+                    i += 1
+        elif q.byte_length() > 0:
+            code = True
+            var q0 = q.as_bytes()[0]
+            var tpl = q == "`" and not raw
+            i = skip_to(b, i, NL, BS if not raw else NL, q0, DL if tpl else q0)
+            if i < n and b[i] != NL:
+                if b[i] == BS and not raw:
+                    i += 1 if i + 1 < n and b[i + 1] == NL else 2
+                elif tpl and at(b, i, "${"):
+                    tdepth.append(1)
+                    q = ""
+                    i += 2
+                elif at(b, i, q):
+                    i += q.byte_length()
+                    q = ""
+                    raw = False
+                else:
+                    i += 1
+        elif cls.unsafe_load(Int(c)) < 2:
+            var any = False
+            while i < n:
+                var k = cls.unsafe_load(Int(bp.unsafe_load(i)))
+                if k >= 2:
+                    break
+                any = any or k == 0
+                i += 1
+            code = code or any
+        elif c == BS:  # an escaped byte outside a string: never a quote or comment start
+            code = True
+            i += 1 if i + 1 < n and b[i + 1] == NL else 2
+        elif len(tdepth) > 0 and (c == UInt8(ord("{")) or c == UInt8(ord("}"))):
+            code = True
+            tdepth[len(tdepth) - 1] += 1 if c == UInt8(ord("{")) else -1
+            if tdepth[len(tdepth) - 1] == 0:
+                _ = tdepth.pop()
+                q = "`"
+            i += 1
+        else:
+            var bi = which(b, i, lg.bs)
+            var li = which(b, i, lg.lc) if bi < 0 else -1
+            var ri = which(b, i, lg.rs) if i == 0 or not is_word(b[i - 1]) else -1
+            if bi >= 0:
+                com = True
+                in_block = True
+                depth = 1
+                block_start = lg.bs[bi]
+                block_end = lg.be[bi]
+                i += block_start.byte_length()
+            elif li >= 0:
+                com = True
+                i = skip_to(b, i, NL, NL, NL, NL)
+            elif lg.doc and not code and (at(b, i, '"""') or at(b, i, "'''")):
+                com = True
+                in_block = True
+                depth = 1
+                block_start = '"""' if at(b, i, '"""') else "'''"
+                block_end = block_start
+                i += 3
+            elif lg.rawdelim and at(b, i, 'R"') and (i == 0 or not is_word(b[i - 1])):
+                code = True
+                var j = i + 2
+                while j < n and j < i + 20 and b[j] != UInt8(ord("(")) and b[j] != UInt8(ord('"')):
+                    j += 1
+                if j < n and b[j] == UInt8(ord("(")):
+                    raw = True
+                    q = ")" + String(unsafe_from_utf8=b[i + 2 : j]) + '"'
+                    i = j + 1
+                else:
+                    q = '"'
+                    i += 2
+            elif ri >= 0:
+                code = True
+                raw = True
+                q = lg.re[ri]
+                i += lg.rs[ri].byte_length()
+            else:
+                code = True
+                var qs = lg.quotes.as_bytes()
+                for j in range(len(qs)):
+                    if c == qs[j]:
+                        var t = chr(Int(c))
+                        var tq = t + t + t
+                        if at(b, i, tq):
+                            q = tq
+                        else:
+                            q = t
+                        i += q.byte_length() - 1
+                        break
+                i += 1
+
+
+def is_word(c: UInt8) -> Bool:
+    return (c >= 48 and c <= 57) or (c >= 65 and c <= 90) or (c >= 97 and c <= 122) or c == 95
 
 
 def last(s: String, sep: String) -> String:
@@ -156,140 +346,6 @@ def lang_of(path: String, by_name: Dict[String, Int], by_ext: Dict[String, Int],
         return by_ext[e] if e in by_ext else -1
     var w = shebang(path)
     return by_sh[w] if w in by_sh else -1
-
-
-def count(s: String, lg: Lang, mut res: List[Int]):
-    """Adds lines, code, comment, blank of s to res[0..3]."""
-    var b = s.as_bytes()
-    var n = len(b)
-    var NL = UInt8(ord("\n"))
-    var BS = UInt8(ord("\\"))
-    var in_block = False
-    var depth = 0  # block comment nesting
-    var block_start = String("")
-    var block_end = String("")
-    var q = String("")  # open string delimiter, "" = none
-    var raw = False  # open string is raw: no escapes, spans lines
-    var tdepth = List[Int]()  # brace depth of each open `${` inside a template string
-    var code = False
-    var com = False
-    var i = 0
-    while i <= n:
-        if i == n or b[i] == NL:
-            if i == n and i > 0 and b[i - 1] == NL:
-                break  # trailing newline: no extra line
-            if i == n and n == 0:
-                break
-            res[0] += 1
-            if code and lg.prose:
-                res[2] += 1  # prose counts as comment, like tokei
-            elif code:
-                res[1] += 1
-            elif com:
-                res[2] += 1
-            else:
-                res[3] += 1
-            if q.byte_length() == 1 and not raw and lg.multiline.find(q) < 0:
-                q = ""  # quote strings end at line end unless the language lets them span lines
-            code = q.byte_length() > 0
-            com = in_block
-            i += 1
-            continue
-        var c = b[i]
-        if in_block:
-            com = True
-            if lg.nested and at(s, i, block_start):
-                depth += 1
-                i += block_start.byte_length()
-            elif at(s, i, block_end):
-                depth -= 1
-                in_block = depth > 0
-                i += block_end.byte_length()
-            else:
-                i += 1
-        elif q.byte_length() > 0:
-            code = True
-            if c == BS and not raw:
-                i += 1 if i + 1 < n and b[i + 1] == NL else 2  # keep the newline: it ends a line
-            elif q == "`" and not raw and at(s, i, "${"):
-                tdepth.append(1)
-                q = ""
-                i += 2
-            elif at(s, i, q):
-                i += q.byte_length()
-                q = ""
-                raw = False
-            else:
-                i += 1
-        elif c == UInt8(ord(" ")) or c == UInt8(ord("\t")) or c == UInt8(ord("\r")):
-            i += 1
-        elif c == BS:  # an escaped byte outside a string: never a quote or comment start
-            code = True
-            i += 1 if i + 1 < n and b[i + 1] == NL else 2
-        elif len(tdepth) > 0 and (c == UInt8(ord("{")) or c == UInt8(ord("}"))):
-            code = True
-            tdepth[len(tdepth) - 1] += 1 if c == UInt8(ord("{")) else -1
-            if tdepth[len(tdepth) - 1] == 0:
-                _ = tdepth.pop()
-                q = "`"
-            i += 1
-        else:
-            var bi = which(s, i, lg.bs)
-            var li = which(s, i, lg.lc) if bi < 0 else -1
-            var ri = which(s, i, lg.rs) if i == 0 or not is_word(b[i - 1]) else -1
-            if bi >= 0:
-                com = True
-                in_block = True
-                depth = 1
-                block_start = lg.bs[bi]
-                block_end = lg.be[bi]
-                i += block_start.byte_length()
-            elif li >= 0:
-                com = True
-                while i < n and b[i] != NL:
-                    i += 1
-            elif lg.doc and not code and (at(s, i, '"""') or at(s, i, "'''")):
-                com = True
-                in_block = True
-                depth = 1
-                block_start = '"""' if at(s, i, '"""') else "'''"
-                block_end = block_start
-                i += 3
-            elif lg.rawdelim and at(s, i, 'R"') and (i == 0 or not is_word(b[i - 1])):
-                code = True
-                var j = i + 2
-                while j < n and j < i + 20 and b[j] != UInt8(ord("(")) and b[j] != UInt8(ord('"')):
-                    j += 1
-                if j < n and b[j] == UInt8(ord("(")):
-                    raw = True
-                    q = ")" + String(s[byte=i + 2 : j]) + '"'
-                    i = j + 1
-                else:
-                    q = '"'
-                    i += 2
-            elif ri >= 0:
-                code = True
-                raw = True
-                q = lg.re[ri]
-                i += lg.rs[ri].byte_length()
-            else:
-                code = True
-                var qs = lg.quotes.as_bytes()
-                for j in range(len(qs)):
-                    if c == qs[j]:
-                        var t = chr(Int(c))
-                        var tq = t + t + t
-                        if at(s, i, tq):
-                            q = tq
-                        else:
-                            q = t
-                        i += q.byte_length() - 1
-                        break
-                i += 1
-
-
-def is_word(c: UInt8) -> Bool:
-    return (c >= 48 and c <= 57) or (c >= 65 and c <= 90) or (c >= 97 and c <= 122) or c == 95
 
 
 def lang_path() raises -> String:
@@ -340,8 +396,8 @@ def main() raises:
             var k = lang_of(files[i], by_name, by_ext, by_sh)
             if k < 0:
                 return
-            var s = open(files[i], "r").read()
-            if s.find("\0") >= 0:
+            var s = open(files[i], "r").read_bytes()
+            if skip_to(s, 0, 0, 0, 0, 0) < len(s):
                 return  # binary
             var r: List[Int] = [0, 0, 0, 0]
             count(s, L[k], r)
