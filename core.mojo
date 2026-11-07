@@ -162,6 +162,12 @@ def prep(mut lg: Lang):
 
 def count(b: Span[UInt8, _], lg: Lang, mut res: List[Int]):
     """Adds lines, code, comment, blank of the bytes b to res[0..3]."""
+    var none = List[UInt8]()
+    count_lines[False](b, lg, res, none)
+
+
+def count_lines[emit: Bool](b: Span[UInt8, _], lg: Lang, mut res: List[Int], mut kinds: List[UInt8]):
+    """count(), and with emit one byte per line appended to kinds: 1 code, 2 comment, 3 blank."""
     var n = len(b)
     var cls = lg.cls.unsafe_ptr()
     var bp = b.unsafe_ptr()
@@ -187,12 +193,20 @@ def count(b: Span[UInt8, _], lg: Lang, mut res: List[Int]):
             res[0] += 1
             if code and lg.prose:
                 res[2] += 1  # prose counts as comment, like tokei
+                comptime if emit:
+                    kinds.append(2)
             elif code:
                 res[1] += 1
+                comptime if emit:
+                    kinds.append(1)
             elif com:
                 res[2] += 1
+                comptime if emit:
+                    kinds.append(2)
             else:
                 res[3] += 1
+                comptime if emit:
+                    kinds.append(3)
             if q.byte_length() == 1 and not raw and lg.multiline.find(q) < 0:
                 q = ""  # quote strings end at line end unless the language lets them span lines
             code = q.byte_length() > 0

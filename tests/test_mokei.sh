@@ -52,6 +52,19 @@ got="$("$b" "$t" | awk '$1=="Python"{print $2,$3,$4}')"
 got="$(cd "$t" && GIT_CEILING_DIRECTORIES="$(dirname "$t")" "$b" | awk '$1=="Python"{print $2,$3,$4}')"
 [ "$got" = "6 6 6" ] || fail walk-default "no git repo: want '6 6 6' got '$got'"
 echo "ok mokei walk"
+# --semantic: statements functions nesting cyclomatic, hand-counted (a.c: 6 ';' + if + for = 8, the ';' after the struct counts)
+while read -r f row; do
+  got="$(cd "$d/fx/sem" && "$b" --semantic "$f" | awk -v f="$f" '$1==f{print $3,$4,$5,$6}')"
+  [ "$got" = "$row" ] || fail "semantic $f" "want '$row' got '$got'"
+done <<'ROWS'
+a.py 12 2 3 6
+a.mojo 11 2 3 4
+a.js 7 2 3 7
+a.rs 5 2 2 6
+a.c 8 2 2 5
+ROWS
+(cd "$d/fx/sem" && "$b" --semantic --json a.py | python3 -I -c 'import json,sys; j=json.load(sys.stdin); assert j["files"][0]["cyclomatic"]==6 and j["total"]["functions"]==2') || fail semantic-json "bad JSON"
+echo "ok mokei semantic"
 # parallel scan = serial scan, byte for byte (this repo plus the fixtures)
 cd "$d/.."
 cmp <(MOKEI_JOBS=1 "$b" tests/fx/* mokei.mojo) <("$b" tests/fx/* mokei.mojo) || fail parallel "output differs from MOKEI_JOBS=1"

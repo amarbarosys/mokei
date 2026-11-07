@@ -8,6 +8,7 @@ from max.algorithm import parallelize
 from std.os.path import dirname, isdir, isfile, islink, realpath
 
 
+from semantic import report as semantic_report
 from core import Lang, Rule, langs, lang_path, lang_of, scan_file, skip_to, walk, lower, cut, jstr, pad
 
 
@@ -17,6 +18,7 @@ def main() raises:
     var rules = List[Rule]()
     var as_json = False
     var per_file = False
+    var do_semantic = False
     var sort_key = String("code")
     var paths = List[String]()
     var ai = 1
@@ -26,6 +28,8 @@ def main() raises:
             as_json = True
         elif a == "--files":
             per_file = True
+        elif a == "--semantic":
+            do_semantic = True
         elif a == "--sort" and ai + 1 < len(args):
             ai += 1
             sort_key = String(args[ai])
@@ -70,6 +74,9 @@ def main() raises:
     var stats = List[List[Int]]()  # files, lines, code, comment, blank
     for _ in range(len(L)):
         stats.append([0, 0, 0, 0, 0])
+    if do_semantic:
+        semantic_report(files, L, by_name, by_ext, by_sh, as_json)
+        return
     var n = len(files)
     var out = List[Int](length=n * 5, fill=0)  # per file: language index + 1, lines, code, comment, blank
     var op = out.unsafe_ptr()
