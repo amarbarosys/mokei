@@ -6,3 +6,4 @@
 - 2026-11-07: `String` has no `s[a:b]` slice syntax -> work on `as_bytes()` indices (the `s[byte=a:b]` form needs a temporary to avoid an aliasing error).
 - 2026-11-07: a fixture hand-count disagreed with tokei and cost a round -> expectations come from a tokei run, hand counts only as a cross-check (a blank line inside a block comment is a comment).
 - 2026-11-07: `String(span_of_bytes)` builds a list repr, not text, and the walk silently matched nothing -> `String(unsafe_from_utf8=span)`; a test that counts only the pass case would not have caught it, the ignore fixture has a case per rule kind.
+- 2026-11-07: `std.subprocess.run` drops trailing newlines of the output, so `git show` content lost its last blank lines and --diff under-counted blanks -> a line number past the end of the classified lines is a blank line; any byte-exact content comes from `open(...).read_bytes()` not `run`.

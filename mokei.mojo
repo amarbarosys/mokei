@@ -9,6 +9,7 @@ from std.os.path import dirname, isdir, isfile, islink, realpath
 
 
 from semantic import report as semantic_report
+from diff import diff_report
 from core import Lang, Rule, langs, lang_path, lang_of, scan_file, skip_to, walk, lower, cut, jstr, pad
 
 
@@ -19,6 +20,8 @@ def main() raises:
     var as_json = False
     var per_file = False
     var do_semantic = False
+    var diff_spec = String("")
+    var budget = String("")
     var sort_key = String("code")
     var paths = List[String]()
     var ai = 1
@@ -30,6 +33,12 @@ def main() raises:
             per_file = True
         elif a == "--semantic":
             do_semantic = True
+        elif a == "--diff" and ai + 1 < len(args):
+            ai += 1
+            diff_spec = String(args[ai])
+        elif a == "--budget" and ai + 1 < len(args):
+            ai += 1
+            budget = String(args[ai])
         elif a == "--sort" and ai + 1 < len(args):
             ai += 1
             sort_key = String(args[ai])
@@ -74,6 +83,10 @@ def main() raises:
     var stats = List[List[Int]]()  # files, lines, code, comment, blank
     for _ in range(len(L)):
         stats.append([0, 0, 0, 0, 0])
+    if diff_spec != "":
+        exit(diff_report(diff_spec, budget, L, by_name, by_ext, by_sh, as_json))
+    if budget != "":
+        raise Error("FAIL args: --budget needs --diff A..B")
     if do_semantic:
         semantic_report(files, L, by_name, by_ext, by_sh, as_json)
         return

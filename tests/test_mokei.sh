@@ -65,6 +65,27 @@ a.c 8 2 2 5
 ROWS
 (cd "$d/fx/sem" && "$b" --semantic --json a.py | python3 -I -c 'import json,sys; j=json.load(sys.stdin); assert j["files"][0]["cyclomatic"]==6 and j["total"]["functions"]==2') || fail semantic-json "bad JSON"
 echo "ok mokei semantic"
+# --diff and --budget: a fixture repo with two commits (+ a third that adds 25 code lines)
+r="$d/../.work/scratch/drepo"
+[ -n "$d" ] && [ -d "$r" ] && rm -rf -- "$r"
+mkdir -p "$r" && cd "$r"
+g() { git -c user.name=t -c user.email=t@t -c commit.gpgsign=false "$@"; }
+git init -q . && printf '# top\nx = 1\n\ndef f():\n    return 1\n' > a.py && printf 'var a = 1;\n// c\n' > b.js
+g add -A && g commit -q -m one
+printf '# top\nx = 2\n# new comment\n\ndef f():\n    return 1\n    # tail\n\ny = 3\n' > a.py && printf '# c\ndef g():\n    pass\n\n' > c.py && git rm -q b.js
+g add -A && g commit -q -m two
+got="$("$b" --diff HEAD~1..HEAD | awk '$1=="Python"||$1=="JavaScript"||$1=="Total"||$1=="loc:"{print}' | tr -s ' ' | tr '\n' '|')"
+want="Python 2 4 3 2 1 0 0|JavaScript 1 0 0 0 1 1 0|Total 3 4 3 2 2 1 0|loc: before 4 · after 6|"
+[ "$got" = "$want" ] || fail diff "want '$want' got '$got'"
+"$b" --diff HEAD~1..HEAD --budget XS > /dev/null || fail budget "4 added code lines must pass XS"
+for i in $(seq 1 25); do echo "v$i = $i"; done > big.py
+g add -A && g commit -q -m three
+if "$b" --diff HEAD~1..HEAD --budget XS > "$r/out.txt"; then fail budget "25 added code lines must fail XS"; fi
+grep -q 'FAIL, must stay under 20' "$r/out.txt" || fail budget "no verdict line"
+"$b" --diff HEAD~1..HEAD --budget S > /dev/null || fail budget "25 added code lines must pass S"
+"$b" --diff HEAD~1..HEAD --json | python3 -I -c 'import json,sys; j=json.load(sys.stdin); assert j["total"]["added"]["code"]==25 and j["loc"]["after"]==25' || fail diff-json "bad JSON"
+cd "$d/.."
+echo "ok mokei diff"
 # parallel scan = serial scan, byte for byte (this repo plus the fixtures)
 cd "$d/.."
 cmp <(MOKEI_JOBS=1 "$b" tests/fx/* mokei.mojo) <("$b" tests/fx/* mokei.mojo) || fail parallel "output differs from MOKEI_JOBS=1"
