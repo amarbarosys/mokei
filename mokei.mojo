@@ -11,6 +11,7 @@ from std.os.path import dirname, isdir, isfile, islink, realpath
 from semantic import report as semantic_report
 from diff import diff_report
 from tokens import report as tokens_report
+from dupes import dupes_report
 from core import Lang, Rule, langs, lang_path, lang_of, scan_file, skip_to, walk, lower, cut, jstr, pad
 
 
@@ -22,6 +23,7 @@ def main() raises:
     var per_file = False
     var do_semantic = False
     var do_tokens = False
+    var dupes_n = 0
     var tok_path = String("")
     var diff_spec = String("")
     var budget = String("")
@@ -36,6 +38,9 @@ def main() raises:
             per_file = True
         elif a == "--semantic":
             do_semantic = True
+        elif a == "--dupes" and ai + 1 < len(args):
+            ai += 1
+            dupes_n = atol(String(args[ai]))
         elif a == "--tokens":
             do_tokens = True
         elif a == "--tokenizer" and ai + 1 < len(args):
@@ -96,6 +101,9 @@ def main() raises:
         exit(diff_report(diff_spec, budget, L, by_name, by_ext, by_sh, as_json))
     if budget != "":
         raise Error("FAIL args: --budget needs --diff A..B")
+    if dupes_n > 0:
+        dupes_report(files, dupes_n, L, by_name, by_ext, by_sh, as_json)
+        return
     if do_tokens:
         tokens_report(files, L, by_name, by_ext, by_sh, tok_path, per_file, as_json)
         return
