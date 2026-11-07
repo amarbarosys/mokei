@@ -1,0 +1,106 @@
+# mokei language table. One [[lang]] per language; add a row, no code change.
+# exts/filenames: matched on the extension / exact basename.  line: line-comment tokens.
+# block: flat list of (start, end) pairs.  nested: block comments nest.
+# quotes: string delimiter bytes.  doc: triple quotes at line start are comments.
+# prose: every non-blank line counts as comment (Markdown, like tokei).
+
+[[lang]]
+name = "Python"
+exts = ["py", "pyi"]
+line = ["#"]
+quotes = "\"'"
+
+[[lang]]
+name = "Mojo"
+exts = ["mojo", "🔥"]
+line = ["#"]
+quotes = "\"'"
+
+[[lang]]
+name = "JavaScript"
+exts = ["js", "mjs", "cjs", "jsx"]
+line = ["//"]
+block = ["/*", "*/"]
+quotes = "\"'`"
+
+[[lang]]
+name = "TypeScript"
+exts = ["ts", "tsx"]
+line = ["//"]
+block = ["/*", "*/"]
+quotes = "\"'`"
+
+[[lang]]
+name = "Rust"
+exts = ["rs"]
+line = ["//"]
+block = ["/*", "*/"]
+quotes = "\""
+
+[[lang]]
+name = "C"
+exts = ["c", "h"]
+line = ["//"]
+block = ["/*", "*/"]
+quotes = "\"'"
+
+[[lang]]
+name = "C++"
+exts = ["cpp", "cc", "cxx", "hpp", "hh"]
+line = ["//"]
+block = ["/*", "*/"]
+quotes = "\"'"
+
+[[lang]]
+name = "Go"
+exts = ["go"]
+line = ["//"]
+block = ["/*", "*/"]
+quotes = "\"'`"
+
+[[lang]]
+name = "CSS"
+exts = ["css"]
+block = ["/*", "*/"]
+quotes = "\"'"
+
+[[lang]]
+name = "HTML"
+exts = ["html", "htm"]
+block = ["<!--", "-->"]
+
+[[lang]]
+name = "Markdown"
+exts = ["md"]
+block = ["<!--", "-->"]
+prose = true
+
+[[lang]]
+name = "Shell"
+exts = ["sh", "bash", "fish", "zsh"]
+line = ["#"]
+quotes = "\"'"
+
+[[lang]]
+name = "Dockerfile"
+exts = ["Dockerfile", "dockerfile"]
+filenames = ["Dockerfile"]
+line = ["#"]
+quotes = "\"'"
+
+[[lang]]
+name = "INI"
+exts = ["ini", "cfg"]
+line = ["#"]
+
+[[lang]]
+name = "TOML"
+exts = ["toml"]
+line = ["#"]
+quotes = "\"'"
+
+[[lang]]
+name = "YAML"
+exts = ["yml", "yaml"]
+line = ["#"]
+quotes = "\"'"

@@ -2,37 +2,77 @@
 # Usage: mokei [FILE ...]   (no args: files from `git ls-files` in cwd)
 from std.sys import argv, exit, stderr
 from std.subprocess import run
+from std.os import getenv
+from std.os.path import dirname, realpath
 
 
 @fieldwise_init
 struct Lang(Copyable, Movable):
     var name: String
-    var exts: String  # space-padded: " py pyi "
-    var lc: String  # line comment token, "" = none
-    var bs: String  # block comment start, "" = none
-    var be: String  # block comment end
+    var exts: List[String]
+    var filenames: List[String]
+    var lc: List[String]  # line comment tokens
+    var bs: List[String]  # block comment starts
+    var be: List[String]  # block comment ends, same index as bs
     var quotes: String  # string delimiter bytes
     var doc: Bool  # triple quotes at line start count as comment
+    var prose: Bool  # every non-blank line counts as comment
 
 
-def langs() -> List[Lang]:
+def strs(v: String) -> List[String]:
+    """The double-quoted strings of v, in order (`\\"` and `\\\\` escapes)."""
+    var out = List[String]()
+    var b = v.as_bytes()
+    var i = 0
+    while i < len(b):
+        if b[i] == UInt8(ord("\"")):
+            var cur = String("")
+            i += 1
+            var st = i
+            while i < len(b) and b[i] != UInt8(ord("\"")):
+                if b[i] == UInt8(ord("\\")):
+                    cur += String(v[byte=st:i])
+                    i += 1
+                    st = i
+                i += 1
+            out.append(cur + String(v[byte=st:i]))
+        i += 1
+    return out^
+
+
+def langs(path: String) raises -> List[Lang]:
+    """Rows of the [[lang]] tables in the TOML file at path."""
     var l = List[Lang]()
-    l.append(Lang("Python", " py pyi ", "#", "", "", "\"'", False))
-    l.append(Lang("Mojo", " mojo 🔥 ", "#", "", "", "\"'", False))
-    l.append(Lang("JavaScript", " js mjs cjs jsx ", "//", "/*", "*/", "\"'`", False))
-    l.append(Lang("TypeScript", " ts tsx ", "//", "/*", "*/", "\"'`", False))
-    l.append(Lang("Rust", " rs ", "//", "/*", "*/", "\"", False))
-    l.append(Lang("C", " c h ", "//", "/*", "*/", "\"'", False))
-    l.append(Lang("C++", " cpp cc cxx hpp hh ", "//", "/*", "*/", "\"'", False))
-    l.append(Lang("Go", " go ", "//", "/*", "*/", "\"'`", False))
-    l.append(Lang("CSS", " css ", "", "/*", "*/", "\"'", False))
-    l.append(Lang("HTML", " html htm ", "", "<!--", "-->", "", False))
-    l.append(Lang("Markdown", " md ", "", "<!--", "-->", "", False))
-    l.append(Lang("Shell", " sh bash fish zsh ", "#", "", "", "\"'", False))
-    l.append(Lang("Dockerfile", " Dockerfile dockerfile ", "#", "", "", "\"'", False))
-    l.append(Lang("INI", " ini cfg ", "#", "", "", "", False))
-    l.append(Lang("TOML", " toml ", "#", "", "", "\"'", False))
-    l.append(Lang("YAML", " yml yaml ", "#", "", "", "\"'", False))
+    for raw in open(path, "r").read().split("\n"):
+        var ln = String(raw.strip())
+        if ln.startswith("[[lang]]"):
+            l.append(Lang("", [], [], [], [], [], "", False, False))
+        elif len(l) > 0 and ln.find("=") > 0 and not ln.startswith("#"):
+            var kv = ln.split("=", 1)
+            var k = String(kv[0].strip())
+            var v = String(kv[1].strip())
+            ref r = l[len(l) - 1]
+            var xs = strs(v)
+            if k == "name":
+                r.name = xs[0]
+            elif k == "exts":
+                r.exts = xs^
+            elif k == "filenames":
+                r.filenames = xs^
+            elif k == "line":
+                r.lc = xs^
+            elif k == "block":
+                for j in range(0, len(xs) - 1, 2):
+                    r.bs.append(xs[j])
+                    r.be.append(xs[j + 1])
+            elif k == "quotes":
+                r.quotes = xs[0]
+            elif k == "doc":
+                r.doc = v.startswith("true")
+            elif k == "prose":
+                r.prose = v.startswith("true")
+            else:
+                raise Error("FAIL languages: unknown key " + k)
     return l^
 
 
@@ -47,13 +87,24 @@ def at(s: String, i: Int, tok: String) -> Bool:
     return True
 
 
-def ext_of(path: String) -> String:
+def which(s: String, i: Int, toks: List[String]) -> Int:
+    """Index of the first token of toks found at byte i of s, else -1."""
+    for k in range(len(toks)):
+        if at(s, i, toks[k]):
+            return k
+    return -1
+
+
+def lang_of(path: String, by_name: Dict[String, Int], by_ext: Dict[String, Int]) raises -> Int:
     var parts = path.split("/")
     var base = String(parts[len(parts) - 1])
-    if base.find(".") < 0:
-        return base
+    if base in by_name:
+        return by_name[base]
     var xs = base.split(".")
-    return String(xs[len(xs) - 1])
+    var e = String(xs[len(xs) - 1])
+    if len(xs) > 1 and e in by_ext:
+        return by_ext[e]
+    return -1
 
 
 def count(s: String, lg: Lang, mut res: List[Int]):
@@ -75,7 +126,7 @@ def count(s: String, lg: Lang, mut res: List[Int]):
             if i == n and n == 0:
                 break
             res[0] += 1
-            if code and lg.name == "Markdown":
+            if code and lg.prose:
                 res[2] += 1  # prose counts as comment, like tokei
             elif code:
                 res[1] += 1
@@ -108,34 +159,45 @@ def count(s: String, lg: Lang, mut res: List[Int]):
                 i += 1
         elif c == UInt8(ord(" ")) or c == UInt8(ord("\t")) or c == UInt8(ord("\r")):
             i += 1
-        elif at(s, i, lg.lc):
-            com = True
-            while i < n and b[i] != NL:
-                i += 1
-        elif at(s, i, lg.bs):
-            com = True
-            in_block = True
-            block_end = lg.be
-            i += lg.bs.byte_length()
-        elif lg.doc and not code and (at(s, i, "\"\"\"") or at(s, i, "'''")):
-            com = True
-            in_block = True
-            block_end = "\"\"\"" if at(s, i, "\"\"\"") else "'''"
-            i += 3
         else:
-            code = True
-            var qs = lg.quotes.as_bytes()
-            for j in range(len(qs)):
-                if c == qs[j]:
-                    var t = chr(Int(c))
-                    var tq = t + t + t
-                    if at(s, i, tq):
-                        q = tq
-                    else:
-                        q = t
-                    i += q.byte_length() - 1
-                    break
-            i += 1
+            var li = which(s, i, lg.lc)
+            var bi = which(s, i, lg.bs)
+            if li >= 0:
+                com = True
+                while i < n and b[i] != NL:
+                    i += 1
+            elif bi >= 0:
+                com = True
+                in_block = True
+                block_end = lg.be[bi]
+                i += lg.bs[bi].byte_length()
+            elif lg.doc and not code and (at(s, i, "\"\"\"") or at(s, i, "'''")):
+                com = True
+                in_block = True
+                block_end = "\"\"\"" if at(s, i, "\"\"\"") else "'''"
+                i += 3
+            else:
+                code = True
+                var qs = lg.quotes.as_bytes()
+                for j in range(len(qs)):
+                    if c == qs[j]:
+                        var t = chr(Int(c))
+                        var tq = t + t + t
+                        if at(s, i, tq):
+                            q = tq
+                        else:
+                            q = t
+                        i += q.byte_length() - 1
+                        break
+                i += 1
+
+
+def lang_path() raises -> String:
+    """$MOKEI_LANGS, else languages.toml one directory above the binary."""
+    var e = getenv("MOKEI_LANGS")
+    if e != "":
+        return e
+    return dirname(dirname(realpath("/proc/self/exe"))) + "/languages.toml"
 
 
 def pad(s: String, w: Int, left: Bool) -> String:
@@ -155,30 +217,34 @@ def main() raises:
         for ln in run("git ls-files").split("\n"):
             if ln.byte_length() > 0:
                 files.append(String(ln))
-    var L = langs()
+    var L = langs(lang_path())
+    var by_name = Dict[String, Int]()
+    var by_ext = Dict[String, Int]()
+    for k in range(len(L)):
+        for x in L[k].filenames:
+            by_name[x] = k
+        for x in L[k].exts:
+            by_ext[x] = k
     var stats = List[List[Int]]()  # files, lines, code, comment, blank
     for _ in range(len(L)):
         stats.append([0, 0, 0, 0, 0])
     for f in files:
-        var e = " " + ext_of(f) + " "
-        if e == "  ":
+        var k = lang_of(f, by_name, by_ext)
+        if k < 0:
             continue
-        for k in range(len(L)):
-            if L[k].exts.find(e) >= 0:
-                var s: String
-                try:
-                    s = open(f, "r").read()
-                except:
-                    print("mokei: skip unreadable", f, file=stderr)
-                    break
-                if s.find("\0") >= 0:
-                    break  # binary
-                var r: List[Int] = [0, 0, 0, 0]
-                count(s, L[k], r)
-                stats[k][0] += 1
-                for j in range(4):
-                    stats[k][j + 1] += r[j]
-                break
+        var s: String
+        try:
+            s = open(f, "r").read()
+        except:
+            print("mokei: skip unreadable", f, file=stderr)
+            continue
+        if s.find("\0") >= 0:
+            continue  # binary
+        var r: List[Int] = [0, 0, 0, 0]
+        count(s, L[k], r)
+        stats[k][0] += 1
+        for j in range(4):
+            stats[k][j + 1] += r[j]
     # sort by code desc
     var order = List[Int]()
     for k in range(len(L)):

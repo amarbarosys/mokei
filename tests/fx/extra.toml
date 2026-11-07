@@ -1,0 +1,5 @@
+[[lang]]
+name = "Foo"
+exts = ["foo"]
+line = ["%"]
+block = ["{-", "-}"]
