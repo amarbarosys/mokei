@@ -28,6 +28,17 @@ ROWS
 got="$(MOKEI_LANGS="$d/fx/extra.toml" "$b" d.foo | awk '$1=="Foo"{print $2,$3,$4,$5,$6}')"
 [ "$got" = "1 5 1 3 1" ] || fail extra-row "got '$got'"
 echo "ok mokei fixtures"
+# output formats: golden JSON (valid per python json), --files, --sort
+(cd "$d/fx" && "$b" --json a.py b.js c.html | cmp - "$d/golden.json") || fail json "differs from tests/golden.json"
+(cd "$d/fx" && "$b" --json --files --sort lines a.py b.js c.html | cmp - "$d/golden-files.json") || fail json-files "differs from tests/golden-files.json"
+python3 -I -c "import json,sys;json.load(open(sys.argv[1]))" "$d/golden-files.json" || fail json "golden-files.json is not JSON"
+got="$(cd "$d/fx" && "$b" --sort files a.py b.js c.html t.ini | awk 'NR>1&&$1!="Total"{printf "%s ",$1}')"
+[ "$got" = "HTML INI JavaScript Python " ] || fail sort-files "got '$got'"
+got="$(cd "$d/fx" && "$b" --sort lines a.py b.js c.html t.ini | awk 'NR>1&&$1!="Total"{printf "%s ",$1}')"
+[ "$got" = "JavaScript Python INI HTML " ] || fail sort-lines "got '$got'"
+got="$(cd "$d/fx" && "$b" --files a.py b.js | awk '$1=="a.py"||$1=="b.js"{printf "%s:%s ",$1,$3}')"
+[ "$got" = "b.js:8 a.py:6 " ] || fail files "got '$got'"
+echo "ok mokei formats"
 # gitignore walk: a fixture tree built fresh under .work/scratch; 6 of the 15 .py files survive the ignore rules
 t="$d/../.work/scratch/tree"
 [ -n "$d" ] && [ -d "$t" ] && rm -rf -- "$t"

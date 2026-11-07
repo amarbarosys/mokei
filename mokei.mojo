@@ -489,6 +489,19 @@ def lang_path() raises -> String:
     return dirname(dirname(realpath("/proc/self/exe"))) + "/languages.toml"
 
 
+def jstr(s: String) -> String:
+    """JSON string literal."""
+    var o = String('"')
+    for c in s.as_bytes():
+        if c == UInt8(ord('"')) or c == UInt8(ord("\\")):
+            o += "\\" + chr(Int(c))
+        elif c < 32:
+            o += "\\u00" + ("0" if c < 16 else "1") + chr(Int(c & 15) + (48 if c & 15 < 10 else 87))
+        else:
+            o += chr(Int(c))
+    return o + '"'
+
+
 def pad(s: String, w: Int, left: Bool) -> String:
     var p = String("")
     for _ in range(w - s.byte_length()):
@@ -500,9 +513,32 @@ def main() raises:
     var args = argv()
     var files = List[String]()
     var rules = List[Rule]()
-    if len(args) > 1:
-        for k in range(1, len(args)):
-            var a = String(args[k])
+    var as_json = False
+    var per_file = False
+    var sort_key = String("code")
+    var paths = List[String]()
+    var ai = 1
+    while ai < len(args):
+        var a = String(args[ai])
+        if a == "--json":
+            as_json = True
+        elif a == "--files":
+            per_file = True
+        elif a == "--sort" and ai + 1 < len(args):
+            ai += 1
+            sort_key = String(args[ai])
+        elif a.startswith("--sort="):
+            sort_key = cut(a, 7, a.byte_length())
+        elif a.startswith("--"):
+            raise Error("FAIL args: unknown flag " + a)
+        else:
+            paths.append(a)
+        ai += 1
+    if sort_key != "code" and sort_key != "lines" and sort_key != "files":
+        raise Error("FAIL args: --sort takes code, lines or files")
+    var jkeys = ["files", "lines", "code", "comments", "blanks"]
+    if len(paths) > 0:
+        for a in paths:
             if isdir(a):
                 walk(String(a.rstrip("/")) if a != "/" else a, "", rules, files)
             else:
@@ -560,30 +596,94 @@ def main() raises:
             stats[k][0] += 1
             for j in range(4):
                 stats[k][j + 1] += out[i * 5 + 1 + j]
-    # sort by code desc
+    # rows: language indexes with files, sorted by the --sort key (largest first), ties by name
     var order = List[Int]()
     for k in range(len(L)):
         if stats[k][0] > 0:
             order.append(k)
-    for a in range(len(order)):
-        for c in range(a + 1, len(order)):
-            if stats[order[c]][2] > stats[order[a]][2]:
-                var t = order[a]
-                order[a] = order[c]
-                order[c] = t
+    var col = 0 if sort_key == "files" else (1 if sort_key == "lines" else 2)  # index into stats[k]
+
+    def lang_before(a: Int, c: Int) {imm stats, imm L, imm col} -> Bool:
+        return stats[a][col] > stats[c][col] or (stats[a][col] == stats[c][col] and L[a].name < L[c].name)
+
+    for a in range(1, len(order)):  # insertion sort: stable and tiny
+        var t = order[a]
+        var c = a - 1
+        while c >= 0 and lang_before(t, order[c]):
+            order[c + 1] = order[c]
+            c -= 1
+        order[c + 1] = t
+    # per-file rows (--files and --json --files): file indexes per language, same key, ties by path
+    var per = List[List[Int]]()
+    for _ in range(len(L)):
+        per.append(List[Int]())
+    for i in range(n):
+        if out[i * 5] > 0:
+            per[out[i * 5] - 1].append(i)
+    var fcol = 1 if sort_key == "lines" else 2  # out[i*5 + fcol]: lines, code
+
+    def file_before(a: Int, c: Int) {imm out, imm files, imm fcol, imm sort_key} -> Bool:
+        if sort_key == "files":
+            return files[a] < files[c]
+        return out[a * 5 + fcol] > out[c * 5 + fcol] or (out[a * 5 + fcol] == out[c * 5 + fcol] and files[a] < files[c])
+
+    for k in order:
+        ref lst = per[k]
+        for a in range(1, len(lst)):
+            var t = lst[a]
+            var c = a - 1
+            while c >= 0 and file_before(t, lst[c]):
+                lst[c + 1] = lst[c]
+                c -= 1
+            lst[c + 1] = t
+    var tot: List[Int] = [0, 0, 0, 0, 0]
+    for k in order:
+        for j in range(5):
+            tot[j] += stats[k][j]
+    if as_json:
+        var js = String('{"languages":[')
+        for oi in range(len(order)):
+            var k = order[oi]
+            js += (',' if oi > 0 else '') + '{"name":' + jstr(L[k].name)
+            for j in range(5):
+                js += ',"' + jkeys[j] + '":' + String(stats[k][j])
+            if per_file:
+                js += ',"reports":['
+                for fi in range(len(per[k])):
+                    var i = per[k][fi]
+                    js += (',' if fi > 0 else '') + '{"name":' + jstr(files[i])
+                    for j in range(4):
+                        js += ',"' + jkeys[j + 1] + '":' + String(out[i * 5 + 1 + j])
+                    js += "}"
+                js += "]"
+            js += "}"
+        js += '],"total":{'
+        for j in range(5):
+            js += (',' if j > 0 else '') + '"' + jkeys[j] + '":' + String(tot[j])
+        print(js + "}}")
+        return
+    var w = 12
+    if per_file:
+        for i in range(n):
+            if out[i * 5] > 0 and files[i].byte_length() + 2 > w:
+                w = files[i].byte_length() + 2
     var hdr = ["Language", "Files", "Lines", "Code", "Comments", "Blanks"]
-    var line = pad(hdr[0], 12, True)
+    var line = pad(hdr[0], w, True)
     for j in range(1, 6):
         line += pad(hdr[j], 10, False)
     print(line)
-    var tot: List[Int] = [0, 0, 0, 0, 0]
     for k in order:
-        var row = pad(L[k].name, 12, True)
+        var row = pad(L[k].name, w, True)
         for j in range(5):
             row += pad(String(stats[k][j]), 10, False)
-            tot[j] += stats[k][j]
         print(row)
-    var trow = pad("Total", 12, True)
+        if per_file:
+            for i in per[k]:
+                var frow = pad(" " + files[i], w, True) + pad("1", 10, False)
+                for j in range(4):
+                    frow += pad(String(out[i * 5 + 1 + j]), 10, False)
+                print(frow)
+    var trow = pad("Total", w, True)
     for j in range(5):
         trow += pad(String(tot[j]), 10, False)
     print(trow)
