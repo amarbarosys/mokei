@@ -86,6 +86,15 @@ grep -q 'FAIL, must stay under 20' "$r/out.txt" || fail budget "no verdict line"
 "$b" --diff HEAD~1..HEAD --json | python3 -I -c 'import json,sys; j=json.load(sys.stdin); assert j["total"]["added"]["code"]==25 and j["loc"]["after"]==25' || fail diff-json "bad JSON"
 cd "$d/.."
 echo "ok mokei diff"
+# --tokens: estimate and the real Qwen2.5 tokenizer (counts from mojo-tokenizers, which matches the Python crate)
+tk="${MOKEI_TEST_TOKENIZER:-$HOME/Models/qwen2.5-0.5b-instruct-hf/tokenizer.json}"
+[ -f "$tk" ] || fail tokens "tokenizer.json not found at $tk (set MOKEI_TEST_TOKENIZER)"
+tcount() { "$b" "$@" --json | python3 -I -c 'import json,sys; print(json.load(sys.stdin)["total"]["tokens"])'; }
+cd "$d/fx"
+[ "$(tcount --tokens a.py)" = 25 ] && [ "$(tcount --tokens b.js)" = 26 ] && [ "$(tcount --tokens sem/a.rs)" = 96 ] || fail tokens-estimate "estimates changed"
+[ "$(tcount --tokenizer "$tk" a.py)" = 24 ] && [ "$(tcount --tokenizer "$tk" b.js)" = 24 ] && [ "$(tcount --tokenizer "$tk" sem/a.rs)" = 95 ] || fail tokens-real "real counts changed"
+cd "$d/.."
+echo "ok mokei tokens"
 # parallel scan = serial scan, byte for byte (this repo plus the fixtures)
 cd "$d/.."
 cmp <(MOKEI_JOBS=1 "$b" tests/fx/* mokei.mojo) <("$b" tests/fx/* mokei.mojo) || fail parallel "output differs from MOKEI_JOBS=1"

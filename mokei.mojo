@@ -10,6 +10,7 @@ from std.os.path import dirname, isdir, isfile, islink, realpath
 
 from semantic import report as semantic_report
 from diff import diff_report
+from tokens import report as tokens_report
 from core import Lang, Rule, langs, lang_path, lang_of, scan_file, skip_to, walk, lower, cut, jstr, pad
 
 
@@ -20,6 +21,8 @@ def main() raises:
     var as_json = False
     var per_file = False
     var do_semantic = False
+    var do_tokens = False
+    var tok_path = String("")
     var diff_spec = String("")
     var budget = String("")
     var sort_key = String("code")
@@ -33,6 +36,12 @@ def main() raises:
             per_file = True
         elif a == "--semantic":
             do_semantic = True
+        elif a == "--tokens":
+            do_tokens = True
+        elif a == "--tokenizer" and ai + 1 < len(args):
+            ai += 1
+            tok_path = String(args[ai])
+            do_tokens = True
         elif a == "--diff" and ai + 1 < len(args):
             ai += 1
             diff_spec = String(args[ai])
@@ -87,6 +96,9 @@ def main() raises:
         exit(diff_report(diff_spec, budget, L, by_name, by_ext, by_sh, as_json))
     if budget != "":
         raise Error("FAIL args: --budget needs --diff A..B")
+    if do_tokens:
+        tokens_report(files, L, by_name, by_ext, by_sh, tok_path, per_file, as_json)
+        return
     if do_semantic:
         semantic_report(files, L, by_name, by_ext, by_sh, as_json)
         return
