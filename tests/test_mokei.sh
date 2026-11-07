@@ -28,3 +28,8 @@ ROWS
 got="$(MOKEI_LANGS="$d/fx/extra.toml" "$b" d.foo | awk '$1=="Foo"{print $2,$3,$4,$5,$6}')"
 [ "$got" = "1 5 1 3 1" ] || fail extra-row "got '$got'"
 echo "ok mokei fixtures"
+# parallel scan = serial scan, byte for byte (this repo plus the fixtures)
+cd "$d/.."
+cmp <(MOKEI_JOBS=1 "$b" tests/fx/* mokei.mojo) <("$b" tests/fx/* mokei.mojo) || fail parallel "output differs from MOKEI_JOBS=1"
+cmp <(MOKEI_JOBS=1 "$b") <("$b") || fail parallel "git ls-files output differs from MOKEI_JOBS=1"
+echo "ok mokei parallel"

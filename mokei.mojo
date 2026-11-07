@@ -3,6 +3,8 @@
 from std.sys import argv, exit, stderr
 from std.subprocess import run
 from std.os import getenv
+from std.runtime import parallelism_level
+from max.algorithm import parallelize
 from std.os.path import dirname, realpath
 
 
@@ -329,23 +331,34 @@ def main() raises:
     var stats = List[List[Int]]()  # files, lines, code, comment, blank
     for _ in range(len(L)):
         stats.append([0, 0, 0, 0, 0])
-    for f in files:
-        var k = lang_of(f, by_name, by_ext, by_sh)
-        if k < 0:
-            continue
-        var s: String
+    var n = len(files)
+    var out = List[Int](length=n * 5, fill=0)  # per file: language index + 1, lines, code, comment, blank
+    var op = out.unsafe_ptr()
+
+    def scan(i: Int) {imm files, imm L, imm by_name, imm by_ext, imm by_sh, imm op}:
         try:
-            s = open(f, "r").read()
+            var k = lang_of(files[i], by_name, by_ext, by_sh)
+            if k < 0:
+                return
+            var s = open(files[i], "r").read()
+            if s.find("\0") >= 0:
+                return  # binary
+            var r: List[Int] = [0, 0, 0, 0]
+            count(s, L[k], r)
+            op.unsafe_store(i * 5, k + 1)
+            for j in range(4):
+                op.unsafe_store(i * 5 + 1 + j, r[j])
         except:
-            print("mokei: skip unreadable", f, file=stderr)
-            continue
-        if s.find("\0") >= 0:
-            continue  # binary
-        var r: List[Int] = [0, 0, 0, 0]
-        count(s, L[k], r)
-        stats[k][0] += 1
-        for j in range(4):
-            stats[k][j + 1] += r[j]
+            print("mokei: skip unreadable", files[i], file=stderr)
+
+    var jobs = atol(getenv("MOKEI_JOBS", "0"))
+    parallelize(scan, n, jobs if jobs > 0 else parallelism_level())
+    for i in range(n):
+        if out[i * 5] > 0:
+            var k = out[i * 5] - 1
+            stats[k][0] += 1
+            for j in range(4):
+                stats[k][j + 1] += out[i * 5 + 1 + j]
     # sort by code desc
     var order = List[Int]()
     for k in range(len(L)):
