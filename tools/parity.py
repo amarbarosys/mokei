@@ -5,11 +5,11 @@ A diff row is KNOWN when "<repo basename> <Language>" appears in docs/known-diff
 """
 import json, os, re, subprocess, sys
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from tokeirows import add_json, mokei_rows
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
-# tokei splits some languages mokei keeps together
-MERGE = {"C Header": "C", "C++ Header": "C++", "TSX": "TypeScript", "JSX": "JavaScript",
-         "BASH": "Shell", "Zsh": "Shell", "Fish": "Shell"}
 
 def die(step, why):
     print(f"FAIL {step}: {why}")
@@ -26,13 +26,7 @@ def tokei(repo, files):
         if p.returncode != 0:
             die("tokei", p.stderr[:200])
         d, _ = json.JSONDecoder().raw_decode(p.stdout)
-        for k, v in d.items():
-            if k == "Total":
-                continue
-            r = tot.setdefault(MERGE.get(k, k), [0, 0, 0, 0, 0])
-            r[0] += len(v["reports"])
-            r[1] += v["code"] + v["comments"] + v["blanks"]
-            r[2] += v["code"]; r[3] += v["comments"]; r[4] += v["blanks"]
+        add_json(tot, d)
         batch, size = [], 0
     for f in files:
         batch.append(f); size += len(f) + 1
@@ -43,15 +37,10 @@ def tokei(repo, files):
 
 def mokei(repo):
     exe = os.environ.get("MOKEI_BIN", os.path.join(ROOT, ".bin", "mokei"))
-    p = subprocess.run([exe], cwd=repo, capture_output=True, text=True)
+    p = subprocess.run([exe, "--json"], cwd=repo, capture_output=True, text=True)
     if p.returncode != 0:
         die("mokei", p.stderr[:200])
-    out = {}
-    for ln in p.stdout.splitlines()[1:]:
-        w = ln.split()
-        if w[0] != "Total":
-            out[" ".join(w[:-5])] = [int(x) for x in w[-5:]]
-    return out
+    return mokei_rows(p.stdout)
 
 def main():
     if len(sys.argv) < 2:
@@ -64,7 +53,7 @@ def main():
     supported = set(re.findall(r'^name = "(.*)"', open(os.path.join(ROOT, "languages.toml")).read(), re.M))
     bad = 0
     print(f"{base}: {'language':<12} {'files lines code comm blank':>30}   tokei | mokei")
-    for lang in sorted(set(m) | {k for k in t if k in supported}):
+    for lang in sorted(set(m) | {k for k in t if k.split(" |- ")[-1] in supported}):
         a, b = t.get(lang, [0] * 5), m.get(lang, [0] * 5)
         if a == b:
             if "--all" in sys.argv:
@@ -73,7 +62,7 @@ def main():
         tag = "KNOWN" if f"{base} {lang}" in known else "DIFF "
         bad += tag == "DIFF "
         print(f"  {tag} {lang:<12} tokei {a}  mokei {b}")
-    skipped = sorted(k for k in t if k not in supported)
+    skipped = sorted(k for k in t if k.split(" |- ")[-1] not in supported)
     print(f"  tokei-only languages (not in mokei): {len(skipped)}")
     sys.exit(1 if bad else 0)
 

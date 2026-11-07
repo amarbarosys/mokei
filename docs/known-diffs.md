@@ -16,6 +16,16 @@ A row stays here only with a cause; delete it when the cause is fixed.
 - Files holding a NUL byte are skipped as binary; tokei counts them as source. Row: `iTools Python` (one 3-byte fixture `a\0b`).
 - Interpreter detection: mokei reads the shebang of extensionless files and also accepts `python`, `node`, `lua`, `mojo` as `#!/usr/bin/python`; tokei only accepts some `env` forms.
 
-## open until A8 (embedded languages)
+## embedded languages (A8)
 
-- HTML and Markdown rows: tokei moves `<script>`, `<style>` and fenced code blocks to child languages; mokei counts them in the parent. Rows: `iTools HTML`, `iTools Markdown`, `TOR-Telegram-Shop HTML`, `TOR-Telegram-Shop Markdown`, `mokei Markdown`, `modular HTML`, `modular Markdown`.
+The 26 probe files in `tests/fx/emb` match tokei exactly (`tests/embed-check.sh`). On the frozen HTML/Markdown corpus
+(`.work/frozen`, 521 files copied from the four corpus repos, reference = one saved `tokei --no-ignore -o json`;
+`tools/frozen.py`) 17 of 24 HTML files and 484 of 492 Markdown files match per file; the rest:
+
+- HTML, 7 files: text on the `<script>`/`<style>` tag lines of multi-line blocks (`<script>(function(){` ... `})();</script>`),
+  saved pages with `<script ...><!-- // --><![CDATA[` open lines (btt-0.html: tokei 76 child lines, mokei 118), a JS desync in
+  tokei (server-dashboard: tokei 220 code 0 comment 0 blank, same line total), and `UN_charter_AR.html` where tokei counts a ~1700 line
+  `<style>` block as JavaScript (JS 2231 vs 12, CSS 20 vs 1554). Cause per file is a guess; no tokei to probe now. Rows: `HTML`, `HTML |- CSS`, `HTML |- JavaScript`.
+- Markdown, 8 files: fences nested inside longer fences or lists (`docstring-style-guide.md`: tokei 181 Mojo code lines, mokei 43), a fence tagged `wolfram` (no such language in mokei).
+  Rows: `Markdown |- Mojo`, `Markdown |- Python`, `Markdown |- Shell`, `Markdown |- Wolfram`, and the Markdown parent lines.
+- tokei skips hidden directories (`.github`, `.cache-pool`) even with `--no-ignore`; mokei counts them. `frozen.py` filters them out.

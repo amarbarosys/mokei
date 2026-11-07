@@ -4,6 +4,8 @@
 # quotes: string delimiter bytes.  multiline: the quote bytes whose strings may span lines.  doc: triple quotes at line start are comments.
 # nested: block comments nest.  raw: flat (start, end) raw-string pairs, no escapes, may span lines.
 # rawdelim: C++ R"delim( )delim" strings.  prose: every non-blank line counts as comment (Markdown, like tokei).
+# embed: "tags" counts <script>/<style> bodies, "fence" counts ```lang blocks, as child languages.
+# alias: extra names a fence info string may use.
 
 [[lang]]
 name = "Python"
@@ -22,6 +24,7 @@ quotes = "\"'`"
 
 [[lang]]
 name = "JavaScript"
+alias = ["jsx"]
 exts = ["js", "mjs", "cjs", "jsx"]
 shebang = ["node"]
 line = ["//"]
@@ -80,15 +83,18 @@ quotes = "\"'"
 name = "HTML"
 exts = ["html", "htm"]
 block = ["<!--", "-->"]
+embed = "tags"
 
 [[lang]]
 name = "Markdown"
 exts = ["md"]
 block = ["<!--", "-->"]
 prose = true
+embed = "fence"
 
 [[lang]]
 name = "Shell"
+alias = ["bash", "zsh", "fish"]
 exts = ["sh", "bash", "fish", "zsh"]
 shebang = ["sh", "bash", "zsh", "fish", "dash", "ksh"]
 line = ["#"]

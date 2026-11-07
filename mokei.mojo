@@ -26,6 +26,8 @@ struct Lang(Copyable, Movable):
     var doc: Bool  # triple quotes at line start count as comment
     var prose: Bool  # every non-blank line counts as comment
     var cls: List[UInt8]  # byte classes built by prep()
+    var embed: String  # "tags": <script>/<style> children, "fence": fenced code children
+    var alias: List[String]  # extra names a fence info string may use
 
 
 def strs(v: String) -> List[String]:
@@ -55,7 +57,7 @@ def langs(path: String) raises -> List[Lang]:
     for raw in open(path, "r").read().split("\n"):
         var ln = String(raw.strip())
         if ln.startswith("[[lang]]"):
-            l.append(Lang("", [], [], [], [], [], [], False, [], [], False, "", "", False, False, []))
+            l.append(Lang("", [], [], [], [], [], [], False, [], [], False, "", "", False, False, [], "", []))
         elif len(l) > 0 and ln.find("=") > 0 and not ln.startswith("#"):
             var kv = ln.split("=", 1)
             var k = String(kv[0].strip())
@@ -90,6 +92,10 @@ def langs(path: String) raises -> List[Lang]:
                 r.multiline = xs[0]
             elif k == "doc":
                 r.doc = v.startswith("true")
+            elif k == "embed":
+                r.embed = xs[0]
+            elif k == "alias":
+                r.alias = xs^
             elif k == "prose":
                 r.prose = v.startswith("true")
             else:
@@ -303,6 +309,206 @@ def count(b: Span[UInt8, _], lg: Lang, mut res: List[Int]):
 
 def is_word(c: UInt8) -> Bool:
     return (c >= 48 and c <= 57) or (c >= 65 and c <= 90) or (c >= 97 and c <= 122) or c == 95
+
+
+def find_tok(b: Span[UInt8, _], i: Int, tok: String) -> Int:
+    """Index of the first tok at or after i, else -1."""
+    var t0 = tok.as_bytes()[0]
+    var j = skip_to(b, i, t0, t0, t0, t0)
+    while j < len(b):
+        if at(b, j, tok):
+            return j
+        j = skip_to(b, j + 1, t0, t0, t0, t0)
+    return -1
+
+
+def blank(b: Span[UInt8, _], a: Int, e: Int) -> Bool:
+    for j in range(a, e):
+        if b[j] != 32 and b[j] != 9 and b[j] != 13:
+            return False
+    return True
+
+
+def lower(s: String) -> String:
+    var o = String("")
+    for c in s.as_bytes():
+        o += chr(Int(c) + 32 if c >= 65 and c <= 90 else Int(c))
+    return o
+
+
+def add_kid(mut kids: List[Int], ci: Int, chunk: Span[UInt8, _], lg: Lang, keep_empty: Bool):
+    """Counts chunk as language ci and adds it to the file's child entries [ci, lines, code, comment, blank]."""
+    var r: List[Int] = [0, 0, 0, 0]
+    count(chunk, lg, r)
+    if r[0] == 0 and not keep_empty:
+        return
+    for e in range(0, len(kids), 5):
+        if kids[e] == ci:
+            for j in range(4):
+                kids[e + 1 + j] += r[j]
+            return
+    kids.append(ci)
+    for j in range(4):
+        kids.append(r[j])
+
+
+def html_split(b: Span[UInt8, _], L: List[Lang], names: Dict[String, Int], mut parent: List[UInt8], mut kids: List[Int]) raises -> Bool:
+    """Cuts <script>/<style> bodies out of an HTML file into child counts, like tokei.
+
+    The open and close tag lines stay in the parent. Text on the tag lines moves to the child
+    when it is not blank; a one-line <style>a{}</style> becomes two parent lines and one child line.
+    """
+    var css = names["css"] if "css" in names else -1
+    var js = names["javascript"] if "javascript" in names else -1
+    var jn = names["json"] if "json" in names else -1
+    var n = len(b)
+    var NL = UInt8(10)
+    var i = 0
+    var from_ = 0
+    var any = False
+    while i < n:
+        i = skip_to(b, i, 60, 60, 60, 60)  # "<"
+        if i >= n:
+            break
+        if at(b, i, "<!--"):
+            var e = find_tok(b, i + 4, "-->")
+            i = n if e < 0 else e + 3
+            continue
+        var script = at(b, i, "<script")
+        if not (script or at(b, i, "<style")):
+            i += 1
+            continue
+        var m = 7 if script else 6
+        if i + m >= n:
+            break
+        var c = b[i + m]
+        if not (c == 32 or c == 62 or c == 47 or c == 10 or c == 9 or c == 13):
+            i += 1
+            continue
+        var gt = skip_to(b, i + m, 62, 62, 62, 62)  # ">"
+        if gt >= n:
+            break
+        var close = "</script>" if script else "</style>"
+        var k = find_tok(b, gt + 1, close)
+        if k < 0:
+            i = gt + 1
+            continue
+        var ci = css if not script else (jn if find_tok(b[i:gt], 0, "json") >= 0 else js)
+        i = k + close.byte_length()
+        if ci < 0:
+            continue
+        var cs = gt + 1
+        var nl1 = skip_to(b, cs, NL, NL, NL, NL)
+        var chunk = List[UInt8]()
+        if nl1 >= k:  # body on one line
+            if blank(b, cs, k):
+                continue
+            chunk.extend(b[cs:k])
+            chunk.append(NL)
+        else:
+            if not blank(b, cs, nl1):
+                chunk.extend(b[cs : nl1 + 1])
+            var lastnl = nl1
+            var p = skip_to(b, nl1 + 1, NL, NL, NL, NL)
+            while p < k:
+                lastnl = p
+                p = skip_to(b, p + 1, NL, NL, NL, NL)
+            chunk.extend(b[nl1 + 1 : lastnl + 1])
+            if not blank(b, lastnl + 1, k):
+                chunk.extend(b[lastnl + 1 : k])
+                chunk.append(NL)
+        parent.extend(b[from_:cs])
+        parent.append(NL)
+        from_ = k
+        any = True
+        add_kid(kids, ci, chunk, L[ci], False)
+    if any:
+        parent.extend(b[from_:n])
+    return any
+
+
+def fence_split(b: Span[UInt8, _], L: List[Lang], names: Dict[String, Int], mut parent: List[UInt8], mut kids: List[Int]) -> Bool:
+    """Cuts ```lang fenced blocks of a known language out of a Markdown file into child counts.
+
+    The fence lines stay in the parent; blank lines at both ends of the block are dropped; a
+    fence without a closing line runs to the end of the file.
+    """
+    if find_tok(b, 0, "```") < 0:
+        return False
+    var n = len(b)
+    var NL = UInt8(10)
+    var i = 0
+    var any = False
+    while i < n:
+        var e = skip_to(b, i, NL, NL, NL, NL)
+        var nxt = e + 1 if e < n else n
+        var t = i
+        while t < e and (b[t] == 32 or b[t] == 9):
+            t += 1
+        if not at(b, t, "```"):
+            parent.extend(b[i:nxt])
+            i = nxt
+            continue
+        var w0 = t + 3
+        while w0 < e and b[w0] == 32:
+            w0 += 1
+        var w1 = w0
+        while w1 < e and b[w1] != 32 and b[w1] != 9 and b[w1] != 13:
+            w1 += 1
+        var word = lower(String(unsafe_from_utf8=b[w0:w1]))
+        var ci = names.get(word, -1)
+        var cstart = -1  # start of the closing fence line
+        var cend = n  # end of the closing fence line, newline included
+        var c = nxt
+        while c < n:
+            var ce = skip_to(b, c, NL, NL, NL, NL)
+            var ct = c
+            while ct < ce and (b[ct] == 32 or b[ct] == 9):
+                ct += 1
+            if at(b, ct, "```"):
+                cstart = c
+                cend = ce + 1 if ce < n else n
+                break
+            c = ce + 1 if ce < n else n
+        if ci < 0:  # unknown language or none: the whole block stays prose
+            parent.extend(b[i:cend])
+            i = cend
+            continue
+        var z = cstart if cstart >= 0 else n
+        var a = nxt
+        while a < z:  # drop leading blank lines
+            var le = skip_to(b, a, NL, NL, NL, NL)
+            if not blank(b, a, le):
+                break
+            a = le + 1
+        while z > a:  # drop trailing blank lines
+            var q = z - 1 if b[z - 1] == NL else z
+            var ls = q
+            while ls > a and b[ls - 1] != NL:
+                ls -= 1
+            if not blank(b, ls, q):
+                break
+            z = ls
+        add_kid(kids, ci, b[a:z], L[ci], True)
+        parent.extend(b[i:nxt])
+        if cstart >= 0:
+            parent.extend(b[cstart:cend])
+        any = True
+        i = cend
+    return any
+
+
+def scan_file(b: Span[UInt8, _], lg: Lang, L: List[Lang], names: Dict[String, Int], mut res: List[Int], mut kids: List[Int]) raises:
+    """Counts b as language lg into res; embedded languages go to kids."""
+    if lg.embed == "":
+        count(b, lg, res)
+        return
+    var parent = List[UInt8]()
+    var split = html_split(b, L, names, parent, kids) if lg.embed == "tags" else fence_split(b, L, names, parent, kids)
+    if split:
+        count(parent, lg, res)
+    else:
+        count(b, lg, res)
 
 
 def last(s: String, sep: String) -> String:
@@ -571,8 +777,17 @@ def main() raises:
     var n = len(files)
     var out = List[Int](length=n * 5, fill=0)  # per file: language index + 1, lines, code, comment, blank
     var op = out.unsafe_ptr()
+    var emb = List[List[Int]]()  # per file: embedded-language entries [language, lines, code, comment, blank]
+    for _ in range(n):
+        emb.append(List[Int]())
+    var ep = emb.unsafe_ptr()
+    var names = Dict[String, Int]()  # lower-case language name or alias -> index, for fences and tags
+    for k in range(len(L)):
+        names[lower(L[k].name)] = k
+        for x in L[k].alias:
+            names[lower(x)] = k
 
-    def scan(i: Int) {imm files, imm L, imm by_name, imm by_ext, imm by_sh, imm op}:
+    def scan(i: Int) {imm files, imm L, imm by_name, imm by_ext, imm by_sh, imm op, imm ep, imm names}:
         try:
             var k = lang_of(files[i], by_name, by_ext, by_sh)
             if k < 0:
@@ -581,7 +796,9 @@ def main() raises:
             if skip_to(s, 0, 0, 0, 0, 0) < len(s):
                 return  # binary
             var r: List[Int] = [0, 0, 0, 0]
-            count(s, L[k], r)
+            var kids = List[Int]()
+            scan_file(s, L[k], L, names, r, kids)
+            ep[i] = kids^
             op.unsafe_store(i * 5, k + 1)
             for j in range(4):
                 op.unsafe_store(i * 5 + 1 + j, r[j])
@@ -596,6 +813,16 @@ def main() raises:
             stats[k][0] += 1
             for j in range(4):
                 stats[k][j + 1] += out[i * 5 + 1 + j]
+    var nl = len(L)
+    var cs = List[Int](length=nl * nl * 5, fill=0)  # embedded stats: [parent][child] -> files, lines, code, comment, blank
+    for i in range(n):
+        if out[i * 5] > 0:
+            ref kd = emb[i]
+            for e in range(0, len(kd), 5):
+                var base = ((out[i * 5] - 1) * nl + kd[e]) * 5
+                cs[base] += 1
+                for j in range(4):
+                    cs[base + 1 + j] += kd[e + 1 + j]
     # rows: language indexes with files, sorted by the --sort key (largest first), ties by name
     var order = List[Int]()
     for k in range(len(L)):
@@ -618,7 +845,7 @@ def main() raises:
     for _ in range(len(L)):
         per.append(List[Int]())
     for i in range(n):
-        if out[i * 5] > 0:
+        if per_file and out[i * 5] > 0:
             per[out[i * 5] - 1].append(i)
     var fcol = 1 if sort_key == "lines" else 2  # out[i*5 + fcol]: lines, code
 
@@ -636,10 +863,25 @@ def main() raises:
                 lst[c + 1] = lst[c]
                 c -= 1
             lst[c + 1] = t
-    var tot: List[Int] = [0, 0, 0, 0, 0]
+    var kidlist = List[List[Int]]()  # per language: embedded child languages, by name like tokei
+    for k in range(len(L)):
+        var ks = List[Int]()
+        for c in range(nl):
+            if cs[(k * nl + c) * 5] > 0:
+                var ins = len(ks)
+                ks.append(c)
+                while ins > 0 and L[ks[ins - 1]].name > L[c].name:
+                    ks[ins] = ks[ins - 1]
+                    ins -= 1
+                ks[ins] = c
+        kidlist.append(ks^)
+    var tot: List[Int] = [0, 0, 0, 0, 0]  # children count in the lines, code, comment, blank totals
     for k in order:
         for j in range(5):
             tot[j] += stats[k][j]
+        for c in kidlist[k]:
+            for j in range(1, 5):
+                tot[j] += cs[(k * nl + c) * 5 + j]
     if as_json:
         var js = String('{"languages":[')
         for oi in range(len(order)):
@@ -647,6 +889,15 @@ def main() raises:
             js += (',' if oi > 0 else '') + '{"name":' + jstr(L[k].name)
             for j in range(5):
                 js += ',"' + jkeys[j] + '":' + String(stats[k][j])
+            if len(kidlist[k]) > 0:
+                js += ',"children":['
+                for ci in range(len(kidlist[k])):
+                    var c = kidlist[k][ci]
+                    js += (',' if ci > 0 else '') + '{"name":' + jstr(L[c].name)
+                    for j in range(5):
+                        js += ',"' + jkeys[j] + '":' + String(cs[(k * nl + c) * 5 + j])
+                    js += "}"
+                js += "]"
             if per_file:
                 js += ',"reports":['
                 for fi in range(len(per[k])):
@@ -662,7 +913,7 @@ def main() raises:
             js += (',' if j > 0 else '') + '"' + jkeys[j] + '":' + String(tot[j])
         print(js + "}}")
         return
-    var w = 12
+    var w = 16
     if per_file:
         for i in range(n):
             if out[i * 5] > 0 and files[i].byte_length() + 2 > w:
@@ -683,6 +934,18 @@ def main() raises:
                 for j in range(4):
                     frow += pad(String(out[i * 5 + 1 + j]), 10, False)
                 print(frow)
+        if len(kidlist[k]) > 0:
+            var sums: List[Int] = [0, stats[k][1], stats[k][2], stats[k][3], stats[k][4]]
+            for c in kidlist[k]:
+                var crow = pad(" |- " + L[c].name, w, True)
+                for j in range(5):
+                    crow += pad(String(cs[(k * nl + c) * 5 + j]), 10, False)
+                    sums[j] += cs[(k * nl + c) * 5 + j] if j > 0 else 0
+                print(crow)
+            var trow = pad(" (Total)", w, True) + pad("", 10, False)
+            for j in range(1, 5):
+                trow += pad(String(sums[j]), 10, False)
+            print(trow)
     var trow = pad("Total", w, True)
     for j in range(5):
         trow += pad(String(tot[j]), 10, False)

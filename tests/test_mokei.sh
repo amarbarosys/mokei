@@ -24,6 +24,7 @@ g.go Go 1 3 2 1 0
 sb Shell 1 5 3 2 0
 cont.py Python 1 3 2 1 0
 ROWS
+bash "$d/embed-check.sh" || fail embedded "see above"
 # a new language row needs no code
 got="$(MOKEI_LANGS="$d/fx/extra.toml" "$b" d.foo | awk '$1=="Foo"{print $2,$3,$4,$5,$6}')"
 [ "$got" = "1 5 1 3 1" ] || fail extra-row "got '$got'"
