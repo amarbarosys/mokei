@@ -14,7 +14,7 @@ case_() {   # name, file to break (relative to tests/), sed expression, expected
     sed -i "$3" "$w/tests/$2"
     cmp -s "$d/$2" "$w/tests/$2" && fail "$1" "the break changed nothing in $2"
     if out="$(MOKEI_BIN="$b" bash "$w/tests/test_mokei.sh" 2>&1)"; then fail "$1" "broken $2 still passed"; fi
-    echo "$out" | grep -q "$4" || fail "$1" "no '$4' in: $(echo "$out" | tail -1)"
+    grep -q "$4" <<<"$out" || fail "$1" "no '$4' in: $(echo "$out" | tail -1)"
     echo "ok negative $1 (failed as it must: $(echo "$out" | tail -1))"
 }
 case_ row-count     test_mokei.sh        's/^a.py Python 1 6 4 1 1$/a.py Python 1 6 5 1 1/' 'FAIL a.py'

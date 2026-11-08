@@ -10,3 +10,4 @@
 | [rules.md](rules.md) | mistakes made while building, each as a rule |
 
 Project overview: [../README.md](../README.md).
+- [design.md](design.md): layout, memory and speed, what was rejected

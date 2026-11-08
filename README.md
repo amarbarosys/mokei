@@ -1,5 +1,9 @@
 # mokei
 
+<!-- badges -->
+[![ci](https://github.com/amarbarosys/mokei/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/amarbarosys/mokei/actions/workflows/ci.yml) [![latest release](https://img.shields.io/github/v/release/amarbarosys/mokei)](https://github.com/amarbarosys/mokei/releases/latest) [![license](https://img.shields.io/github/license/amarbarosys/mokei)](https://github.com/amarbarosys/mokei/blob/main/LICENSE) [![checks](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/amarbarosys/mokei/badges/checks.json)](https://github.com/amarbarosys/mokei/actions/workflows/ci.yml)
+<!-- /badges -->
+
 A line counter in Mojo, like [tokei](https://github.com/XAMPPRocky/tokei), for 40 languages from a TOML table, plus questions tokei cannot answer: a size budget for a diff, tokens per language, duplicated blocks, definitions no test names.
 
 **Verified against** tokei 15.0.0: the language rows of `tests/test_mokei.sh` and `tests/embedded.expected` are tokei runs (`tests/SOURCES.md` lists the expectations that are not), and mokei matched tokei on four corpora (this repo, a web app, a tool collection, and a Modular monorepo of 11.5k files) except the cases in [docs/known-diffs.md](docs/known-diffs.md), where tokei is wrong or mokei chose differently. The last full corpus run was 2026-11-07; later scanner changes were checked against the fixtures only. `tools/parity.sh` repeats the run when tokei 15.0.0 is installed. The test runner never needs tokei.
