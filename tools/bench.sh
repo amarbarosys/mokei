@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# Copyright 2026 amarbaro.org. Licensed under the Apache License, Version 2.0.
 # hyperfine: mokei (parallel and MOKEI_JOBS=1) vs tokei, run inside REPO (default: the large corpus repo).
 # Usage: tools/bench.sh [REPO] [RUNS]   mokei reads git ls-files, tokei walks the tree with ignore rules.
 set -euo pipefail

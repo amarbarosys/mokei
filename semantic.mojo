@@ -1,3 +1,4 @@
+# Copyright 2026 amarbaro.org. Licensed under the Apache License, Version 2.0.
 # mokei --semantic: statements, functions, max nesting and a cyclomatic estimate per file, by token rules.
 from core import Lang, at, is_word, jstr, lang_of, pad
 

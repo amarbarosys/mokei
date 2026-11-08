@@ -1,3 +1,4 @@
+# Copyright 2026 amarbaro.org. Licensed under the Apache License, Version 2.0.
 # mokei --dupes N: blocks of at least N consecutive normalized code lines that occur twice.
 # Comments and blank lines are skipped (the scanner classifies them), whitespace runs collapse to one space,
 # a rolling hash over windows of N code-line hashes finds candidates, equal line hashes confirm them, and

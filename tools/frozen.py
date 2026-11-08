@@ -1,3 +1,4 @@
+# Copyright 2026 amarbaro.org. Licensed under the Apache License, Version 2.0.
 """Embedded-language parity on a frozen corpus: mokei --json vs a saved `tokei --no-ignore -o json DIR`.
 
 Usage: frozen.py TOKEI_JSON DIR   (default .work/frozen/tokei.json .work/frozen/files)

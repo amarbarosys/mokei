@@ -1,3 +1,4 @@
+# Copyright 2026 amarbaro.org. Licensed under the Apache License, Version 2.0.
 """Oracle: tokei vs mokei on one repo, same file list (git ls-files), per-language diff.
 
 Usage: parity.py REPO [--all]   exit 1 on a diff not listed in docs/known-diffs.md.

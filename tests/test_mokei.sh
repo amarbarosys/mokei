@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# Copyright 2026 amarbaro.org. Licensed under the Apache License, Version 2.0.
 # One runner: each row is a fixture, numbers from a tokei 15.0.0 run (2026-11-07), hand counts only as a cross-check.
 # row: file | Language | files lines code comments blanks
 set -euo pipefail

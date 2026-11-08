@@ -1,3 +1,4 @@
+# Copyright 2026 amarbaro.org. Licensed under the Apache License, Version 2.0.
 # mokei --diff A..B [--budget XS|S|M|L]: code, comment and blank lines added and removed per language.
 # git supplies the changed line numbers (diff --unified=0); every changed line is classified in the file as it
 # stands on its own side (old content for removed lines, new content for added lines), so a line that turns from

@@ -1,3 +1,4 @@
+# Copyright 2026 amarbaro.org. Licensed under the Apache License, Version 2.0.
 # mokei --tokens [--tokenizer PATH]: tokens per language (and per file).
 # Default: a byte-level estimate. With --tokenizer: the real count from a Hugging Face tokenizer.json (BPE, via mojo-tokenizers).
 from tokenizers import Tokenizer

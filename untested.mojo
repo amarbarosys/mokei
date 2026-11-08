@@ -1,3 +1,4 @@
+# Copyright 2026 amarbaro.org. Licensed under the Apache License, Version 2.0.
 # mokei --untested: defs whose name appears in no test file. A hint (name match only), never a verdict.
 # Test files: a path with a test/tests/__tests__ directory, or a name test_*, *_test.*, *.test.*, *.spec.*.
 # Defs (comments and strings blanked first): Python/Mojo def and fn, JavaScript/TypeScript function NAME, Rust fn NAME.

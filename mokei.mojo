@@ -1,3 +1,4 @@
+# Copyright 2026 amarbaro.org. Licensed under the Apache License, Version 2.0.
 # mokei: count code, comment and blank lines per language (tokei-like).
 # Usage: mokei [FILE|DIR ...]   (DIR: walk honouring .gitignore; no args: `git ls-files` in cwd, else walk .)
 from std.sys import argv, exit, stderr

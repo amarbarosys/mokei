@@ -1,3 +1,4 @@
+# Copyright 2026 amarbaro.org. Licensed under the Apache License, Version 2.0.
 """Shared by parity.py and frozen.py: tokei JSON and mokei --json to {row name: [files, lines, code, comments, blanks]}.
 
 A child row is named "<Parent> |- <Child>". tokei names that mokei merges are mapped (BASH, Zsh, Fish -> Shell, ...).

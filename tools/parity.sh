@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# Copyright 2026 amarbaro.org. Licensed under the Apache License, Version 2.0.
 # tokei vs mokei on the corpus. Needs tokei (oracle, installed only for this run).
 # Usage: tools/parity.sh [REPO...]   default corpus below. Exit 1 on an unlisted diff.
 set -euo pipefail

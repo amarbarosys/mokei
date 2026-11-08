@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# Copyright 2026 amarbaro.org. Licensed under the Apache License, Version 2.0.
 # Builds .bin/mokei. MOJO: a Mojo 1.2.0 with the max package; MOKEI_TOKENIZERS: src dir of mojo-tokenizers.
 set -euo pipefail
 d="$(dirname "$(readlink -f "$0")")"

@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# Copyright 2026 amarbaro.org. Licensed under the Apache License, Version 2.0.
 # --tokens estimate vs the real tokenizer on the corpus, per language and total.
 # Usage: tools/token-measure.sh [TOKENIZER_JSON] [REPO...]   exit 1 when the total or a language of >= 50 kB is off by more than 10%.
 set -euo pipefail

@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# Copyright 2026 amarbaro.org. Licensed under the Apache License, Version 2.0.
 # mokei vs tests/embedded.expected (rows from tokei 15.0.0 JSON): one row per file/language and per child (|-).
 set -euo pipefail
 d="$(dirname "$(readlink -f "$0")")"; b="${MOKEI_BIN:-$d/../.bin/mokei}"

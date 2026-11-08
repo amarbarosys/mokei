@@ -1,0 +1,19 @@
+mokei
+Copyright 2026 amarbaro.org <dev@amarbaro.org>
+
+Licensed under the Apache License, Version 2.0 (see LICENSE).
+
+Third-party material:
+
+- tests/fx/ holds small fixtures written for mokei. Their expected counts come from a run of
+  tokei 15.0.0 (MIT or Apache-2.0, https://github.com/XAMPPRocky/tokei) used as the oracle;
+  no tokei source or data is copied. See tests/SOURCES.md.
+- languages.toml is a table written for mokei. tokei is the behavioural reference for how
+  lines are classified; its language list is not redistributed here.
+- Build-time dependency, not redistributed: mojo-tokenizers (Apache-2.0,
+  https://github.com/amarbaro/mojo-tokenizers). The Mojo compiler and the max package are
+  Modular's and are installed separately under Modular's own terms.
+- The --tokens test reads a Qwen2.5 tokenizer.json (Apache-2.0, Alibaba Cloud) from the
+  tester's disk; the file is not part of this repository.
+
+Removal requests: dev@amarbaro.com.

@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Launcher for ~/iTools/bin/mokei: rebuild when any source is newer than the binary, then run.
+# Copyright 2026 amarbaro.org. Licensed under the Apache License, Version 2.0.
+# Launcher: rebuild when any source is newer than the binary, then run.
 set -euo pipefail
 d="$(dirname "$(readlink -f "$0")")"
 b="$d/.bin/mokei"

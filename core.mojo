@@ -1,3 +1,4 @@
+# Copyright 2026 amarbaro.org. Licensed under the Apache License, Version 2.0.
 # mokei core: language table, scanner, embedded languages, gitignore walk.
 from std.sys import argv, exit, stderr
 from std.subprocess import run
