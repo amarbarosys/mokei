@@ -5,7 +5,7 @@
 set -euo pipefail
 d="$(dirname "$(readlink -f "$0")")"
 tok="${1:-$HOME/Models/qwen2.5-0.5b-instruct-hf/tokenizer.json}"; shift || true
-repos=("$@"); [ ${#repos[@]} -gt 0 ] || repos=("$d/.." ~/Projects/science/TOR-Telegram-Shop ~/iTools)
+repos=("$@"); [ ${#repos[@]} -gt 0 ] || repos=("$d/..")
 [ -f "$tok" ] || { echo "FAIL tokenizer: $tok not found"; exit 1; }
 mkdir -p "$d/../.work"
 est="$d/../.work/tok-est.json"; real="$d/../.work/tok-real.json"
