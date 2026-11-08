@@ -35,6 +35,9 @@ def main() raises:
     var ai = 1
     while ai < len(args):
         var a = String(args[ai])
+        if a == "--version":
+            print("mokei " + String(open(dirname(dirname(realpath("/proc/self/exe"))) + "/VERSION", "r").read().strip()))
+            return
         if a == "--json":
             as_json = True
         elif a == "--files":

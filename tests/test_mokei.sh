@@ -118,3 +118,8 @@ cd "$d/.."
 cmp <(MOKEI_JOBS=1 "$b" tests/fx/* mokei.mojo) <("$b" tests/fx/* mokei.mojo) || fail parallel "output differs from MOKEI_JOBS=1"
 cmp <(MOKEI_JOBS=1 "$b") <("$b") || fail parallel "git ls-files output differs from MOKEI_JOBS=1"
 echo "ok mokei parallel"
+# --version reads VERSION (the one home of the version) and CHANGELOG.md has an entry for it
+v="$(tr -d '\n' < "$d/../VERSION")"
+[ "$("$b" --version)" = "mokei $v" ] || fail version "mokei --version is not 'mokei $v'"
+grep -q "^## $v " "$d/../CHANGELOG.md" || fail changelog "no '## $v' entry in CHANGELOG.md"
+echo "ok mokei version"
