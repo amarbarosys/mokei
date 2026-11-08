@@ -19,7 +19,7 @@ A row stays here only with a cause; delete it when the cause is fixed.
 ## embedded languages (A8)
 
 The 26 probe files in `tests/fx/emb` match tokei exactly (`tests/embed-check.sh`). On the frozen HTML/Markdown corpus
-(`.work/frozen`, 521 files copied from the four corpus repos, reference = one saved `tokei --no-ignore -o json`;
+(a local `.work/frozen` dir, 521 files copied from the four corpus repos, reference = one saved `tokei --no-ignore -o json`;
 `tools/frozen.py`) 17 of 24 HTML files and 484 of 492 Markdown files match per file; the rest:
 
 - HTML, 7 files: text on the `<script>`/`<style>` tag lines of multi-line blocks (`<script>(function(){` ... `})();</script>`),

@@ -3,9 +3,9 @@
 Thesis: mokei already matches tokei on 8 languages and is right where tokei is wrong; it becomes worth keeping when it is faster than tokei on a large repo and answers questions tokei cannot (diff budgets, tokens, duplicates).
 
 Order: tokei parity + speed first (Phase A), then agent-facing features (Phase B).
-Toolchain: Mojo 1.2.0, `~/Projects/mojo/mojo-uregex/.venv/bin/mojo` (or `$MOJO`).
-Oracle: tokei, installed only for a comparison run and removed after (`~/Brain/OS/` note before and after).
-Corpus for parity/speed: this repo, `~/Projects/science/TOR-Telegram-Shop`, `~/iTools`, plus one large repo (`~/Projects/mojo/modular-ref/modular-main`).
+Toolchain: Mojo 1.2.0 (`$MOJO`).
+Oracle: tokei, installed only for a comparison run and removed after.
+Corpus for parity/speed: this repo and three other repos (a Python/JS web app, a shell and Python tool collection, and the Modular monorepo, 11.5k files).
 
 ## Phase A: parity + speed
 

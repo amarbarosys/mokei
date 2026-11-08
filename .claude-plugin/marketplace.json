@@ -1,0 +1,21 @@
+{
+  "name": "mokei",
+  "owner": {
+    "name": "amarbaro.org",
+    "email": "dev@amarbaro.com"
+  },
+  "metadata": {
+    "description": "Agent skill for mokei, a line counter in Mojo"
+  },
+  "plugins": [
+    {
+      "name": "mokei",
+      "description": "Count lines, tokens, diffs, duplicates and untested names with mokei",
+      "source": "./",
+      "strict": false,
+      "skills": [
+        "./skills/mokei"
+      ]
+    }
+  ]
+}
