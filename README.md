@@ -20,7 +20,7 @@ Total                    3        17         9         6         2
 Needs [pixi](https://pixi.sh), `git` and `curl`. pixi installs Mojo 1.2.0 and the `max` package; the gate fetches `mojo-tokenizers` v0.1.0 and a checksummed Qwen2.5 `tokenizer.json`.
 
 ```
-git clone https://github.com/amarbaro/mokei && cd mokei   # after publication
+git clone https://github.com/amarbarosys/mokei && cd mokei   # after publication
 pixi install
 pixi run gate        # build, tests/test_mokei.sh, negative control; no GPU
 .bin/mokei --version
