@@ -41,6 +41,21 @@ quotes = "\"'`"
 multiline = "`"
 
 [[lang]]
+name = "GDScript"
+exts = ["gd"]
+shebang = ["godot"]
+line = ["#"]
+raw = ["\"\"\"", "\"\"\"", "r\"", "\"", "r'", "'"]
+quotes = "\"'"
+
+[[lang]]
+name = "Godot Shader"
+exts = ["gdshader", "gdshaderinc"]
+line = ["//"]
+block = ["/*", "*/"]
+quotes = "\""
+
+[[lang]]
 name = "Rust"
 exts = ["rs"]
 line = ["//"]

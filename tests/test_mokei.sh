@@ -33,6 +33,7 @@ echo "ok mokei fixtures"
 # output formats: golden JSON (valid per python json), --files, --sort
 (cd "$d/fx" && "$b" --json a.py b.js c.html | cmp - "$d/golden.json") || fail json "differs from tests/golden.json"
 (cd "$d/fx" && "$b" --json --files --sort lines a.py b.js c.html | cmp - "$d/golden-files.json") || fail json-files "differs from tests/golden-files.json"
+(cd "$d/fx" && "$b" --json godot.gd godot.gdshader | cmp - "$d/golden-godot.json") || fail json-godot "differs from tests/golden-godot.json"
 python3 -I -c "import json,sys;json.load(open(sys.argv[1]))" "$d/golden-files.json" || fail json "golden-files.json is not JSON"
 got="$(cd "$d/fx" && "$b" --sort files a.py b.js c.html t.ini | awk 'NR>1&&$1!="Total"{printf "%s ",$1}')"
 [ "$got" = "HTML INI JavaScript Python " ] || fail sort-files "got '$got'"
